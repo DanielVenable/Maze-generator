@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maze generator</title>
+</head>
+<body>
+    <canvas style="border: 1px solid black;"></canvas>
+    <div>
+        <label>Height: <input type="number"></label>
+        <label>Width: <input type="number"></label>
+        <button>Generate!</button>
+    </div>
+</body>
+<script>
+    'use strict';
+
+    const ctx = document.querySelector('canvas').getContext('2d');
+    const inputs = document.querySelectorAll('input');
+    const scale = 10;
+
+    let count = 0;
+
+    document.querySelector('button').addEventListener('click', () => {
+        const [height, width] = [...inputs].map(a => +a.value);
+        if (!(height > 0 && width > 0)) {
+            alert('please enter valid dimensions');
+            return;
+        }
+        ctx.canvas.height = (height + 2) * scale;
+        ctx.canvas.width  = (width  + 2) * scale;
+        ctx.setTransform(scale, 0, 0, scale, 0, 0);
+        const maze = new Maze(width, height);
+        ctx.lineWidth = scale / 30;
+        for (const {start, end} of maze.lines) {
+            ctx.beginPath();
+            ctx.moveTo(...start);
+            ctx.lineTo(...end);
+            ctx.stroke();
+        }
+    });
+
+    class Maze {
+        lines = [];
+
+        constructor(width, height) {
+            const rects = [new Rect(0.5, 1.5 + width, 0.5, 1.5 + height, [1, 1], [width + 1, height + 1])];
+            for (const rect of rects) {
+                if (rect.isLine) this.lines.push(rect);
+                else rects.push(...rect.subrects());
+            }
+        }
+    }
+
+    class Rect {
+        constructor(left, right, top, bottom, start, end) {
+            this.left = left;
+            this.right = right;
+            this.top = top;
+            this.bottom = bottom;
+            this.start = start;
+            this.end = end;
+            this.args = Object.freeze(arguments);
+        }
+
+        subrects() {
+            const width = this.right - this.left - 1,
+                height = this.bottom - this.top - 1;
+            const cutNum = random(width + height) + 1;
+            const args = [...this.args];
+            if (cutNum <= width) {
+                const x = cutNum + this.left;
+                args[this.start[0] < x ? 1 : 0] = x;
+                if ((this.start[0] < x) === (this.end[0] < x)) {
+                    return [new Rect(...args)];
+                } else {
+                    const args2 = [...this.args];
+                    args2[this.end[0] < x ? 1 : 0] = x;
+                    const y = random(height + 1) + this.top + 0.5;
+                    args[5]  = [this.start[0] < x ? x - 0.5 : x + 0.5, y];
+                    args2[4] = [this.end  [0] < x ? x - 0.5 : x + 0.5, y];
+                    return [new Rect(...args), new Rect(...args2), new Segment(args[5], args2[4])];
+                }
+            } else {
+                const y = cutNum - width + this.top;
+                args[this.start[1] < y ? 3 : 2] = y;
+                if ((this.start[1] < y) === (this.end[1] < y)) {
+                    return [new Rect(...args)];
+                } else {
+                    const args2 = [...this.args];
+                    args2[this.end[1] < y ? 3 : 2] = y;
+                    const x = random(width + 1) + this.left + 0.5;
+                    args[5]  = [x, this.start[1] < y ? y - 0.5 : y + 0.5];
+                    args2[4] = [x, this.end  [1] < y ? y - 0.5 : y + 0.5];
+                    return [new Rect(...args), new Rect(...args2), new Segment(args[5], args2[4])];
+                }
+            }
+        }
+
+        get isLine() {
+            return this.bottom - this.top === 1 || this.right - this.left === 1;
+        }
+    }
+
+    class Segment {
+        constructor(start, end) {
+            this.start = start;
+            this.end = end;
+            console.assert(start[0] === end[0] || start[1] === end[1]);
+        }
+    }
+
+    Segment.prototype.isLine = true;
+
+    function random(max) {
+        return Math.floor(Math.random() * max);
+    }
+</script></html>
