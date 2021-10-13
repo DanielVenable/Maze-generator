@@ -6,12 +6,12 @@
     <title>Maze generator</title>
 </head>
 <body>
-    <canvas style="border: 1px solid black;"></canvas>
     <div>
         <label>Height: <input type="number"></label>
         <label>Width: <input type="number"></label>
         <button>Generate!</button>
     </div>
+    <canvas></canvas>
 </body>
 <script>
     'use strict';
@@ -25,30 +25,41 @@
     document.querySelector('button').addEventListener('click', () => {
         const [height, width] = [...inputs].map(a => +a.value);
         if (!(height > 0 && width > 0)) {
-            alert('please enter valid dimensions');
+            alert('Please enter valid dimensions');
             return;
         }
         ctx.canvas.height = (height + 2) * scale;
         ctx.canvas.width  = (width  + 2) * scale;
         ctx.setTransform(scale, 0, 0, scale, 0, 0);
+        ctx.fillRect(0, 0, width + 2, height + 2);
         const maze = new Maze(width, height);
-        ctx.lineWidth = scale / 30;
-        for (const {start, end} of maze.lines) {
-            ctx.beginPath();
-            ctx.moveTo(...start);
+        ctx.lineWidth = 0.5;
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.beginPath();
+        ctx.moveTo(1, 0);
+        for (const { start, end } of maze.lines) {
+            ctx.lineTo(...start);
             ctx.lineTo(...end);
-            ctx.stroke();
         }
+        ctx.lineTo(width + 1, height + 2);
+        ctx.stroke();
     });
 
     class Maze {
         lines = [];
 
         constructor(width, height) {
-            const rects = [new Rect(0.5, 1.5 + width, 0.5, 1.5 + height, [1, 1], [width + 1, height + 1])];
-            for (const rect of rects) {
-                if (rect.isLine) this.lines.push(rect);
-                else rects.push(...rect.subrects());
+            let current = new Rect(0.5, 1.5 + width, 0.5, 1.5 + height, [1, 1], [width + 1, height + 1]);
+            const later = [];
+            while (true) {
+                if (current.isLine) {
+                    this.lines.push(current);
+                    if (current = later.pop()) continue;
+                    return;
+                }
+                const [r1, r2] = current.subrects();
+                current = r1;
+                if (r2) later.push(r2);
             }
         }
     }
