@@ -86,7 +86,7 @@
             }
 
             const isValid = ({ end: [x, y] }) =>
-                0 < x && x <= width + 1 && 0 < y && y <= width + 1 && !grid[y][x];
+                0 < x && x <= width + 1 && 0 < y && y <= height + 1 && !grid[y][x];
 
             const potentialSegments = new Shuffler;
             grid.forEach((arr, y) => arr.forEach((_, x) => addValidAdjacentSegments(x, y)));
