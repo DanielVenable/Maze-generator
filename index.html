@@ -7,10 +7,12 @@
 </head>
 <body>
     <div>
-        <label>Height: <input type="number"></label>
-        <label>Width: <input type="number"></label>
+        <label>Height: <input type="number" value="50"></label>
+        <label>Width: <input type="number" value="50"></label>
+        <label>Line thickness: <input type="number" min="0.1" max="0.9" step="0.1" value="0.5"></label>
         <button>Generate!</button>
     </div>
+    <br>
     <canvas></canvas>
 </body>
 <script>
@@ -23,17 +25,19 @@
     let count = 0;
 
     document.querySelector('button').addEventListener('click', () => {
-        const [height, width] = [...inputs].map(a => +a.value);
-        if (!(height > 0 && width > 0)) {
-            alert('Please enter valid dimensions');
+        let [height, width, thickness] = [...inputs].map(a => +a.value);
+        height = Math.floor(height);
+        width = Math.floor(width);
+        if (!(height > 0 && width > 0 && 0 < thickness && thickness < 1)) {
+            alert('Please enter valid values');
             return;
         }
         ctx.canvas.height = (height + 2) * scale;
         ctx.canvas.width  = (width  + 2) * scale;
-        ctx.setTransform(scale, 0, 0, scale, 0, 0);
+        ctx.setTransform(scale, 0, 0, scale, 0.5, 0.5);
         ctx.fillRect(0, 0, width + 2, height + 2);
         const { lines, segments } = new Maze(width, height);
-        ctx.lineWidth = 0.5;
+        ctx.lineWidth = thickness;
         ctx.strokeStyle = '#FFFFFF';
         ctx.beginPath();
         ctx.moveTo(1, 0);
@@ -44,6 +48,7 @@
         }
         ctx.lineTo(width + 1, height + 2);
         ctx.stroke();
+        ctx.lineCap = 'square';
         for (const { start, end } of segments) {
             ctx.beginPath();
             ctx.moveTo(...start);
