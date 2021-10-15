@@ -32,34 +32,84 @@
         ctx.canvas.width  = (width  + 2) * scale;
         ctx.setTransform(scale, 0, 0, scale, 0, 0);
         ctx.fillRect(0, 0, width + 2, height + 2);
-        const maze = new Maze(width, height);
+        const { lines, segments } = new Maze(width, height);
         ctx.lineWidth = 0.5;
         ctx.strokeStyle = '#FFFFFF';
         ctx.beginPath();
         ctx.moveTo(1, 0);
-        for (const { start, end } of maze.lines) {
+        ctx.stroke();
+        for (const { start, end } of lines) {
             ctx.lineTo(...start);
             ctx.lineTo(...end);
         }
         ctx.lineTo(width + 1, height + 2);
         ctx.stroke();
+        for (const { start, end } of segments) {
+            ctx.beginPath();
+            ctx.moveTo(...start);
+            ctx.lineTo(...end);
+            ctx.stroke();
+        }
     });
 
     class Maze {
         lines = [];
+        segments = [];
 
         constructor(width, height) {
             let current = new Rect(0.5, 1.5 + width, 0.5, 1.5 + height, [1, 1], [width + 1, height + 1]);
             const later = [];
+            const grid = [];
+            for (let i = 1; i <= height + 1; i++) {
+                grid[i] = [];
+            }
             while (true) {
                 if (current.isLine) {
                     this.lines.push(current);
+                    if (current.start[0] === current.end[0]) {
+                        const max = Math.max(current.start[1], current.end[1])
+                        for (let y = Math.min(current.start[1], current.end[1]); y <= max; y++) {
+                            grid[y][current.start[0]] = true;
+                        }
+                    } else if (current.start[1] === current.end[1]) {
+                        const max = Math.max(current.start[0], current.end[0]);
+                        for (let x = Math.min(current.start[0], current.end[0]); x <= max; x++) {
+                            grid[current.start[1]][x] = true;
+                        }
+                    }
                     if (current = later.pop()) continue;
-                    return;
+                    break;
                 }
                 const [r1, r2] = current.subrects();
                 current = r1;
                 if (r2) later.push(r2);
+            }
+
+            const isValid = ({ end: [x, y] }) =>
+                0 < x && x <= width + 1 && 0 < y && y <= width + 1 && !grid[y][x];
+
+            const potentialSegments = new Shuffler;
+            grid.forEach((arr, y) => arr.forEach((_, x) => addValidAdjacentSegments(x, y)));
+
+            function addValidAdjacentSegments(x, y) {
+                const start = [x, y];
+                addIfValid(new Segment(start, [x - 1, y]));
+                addIfValid(new Segment(start, [x + 1, y]));
+                addIfValid(new Segment(start, [x, y - 1]));
+                addIfValid(new Segment(start, [x, y + 1]));
+            }
+
+            function addIfValid(segment) {
+                if (isValid(segment)) potentialSegments.push(segment);
+            }
+
+            while (potentialSegments.size) {
+                const segment = potentialSegments.pull();
+                if (!isValid(segment)) continue;
+                this.segments.push(segment);
+                const [x, y] = segment.end;
+                grid[y][x] = true;
+                addValidAdjacentSegments(x, y);
             }
         }
     }
@@ -91,7 +141,7 @@
                     const y = random(height + 1) + this.top + 0.5;
                     args[5]  = [this.start[0] < x ? x - 0.5 : x + 0.5, y];
                     args2[4] = [this.end  [0] < x ? x - 0.5 : x + 0.5, y];
-                    return [new Rect(...args), new Rect(...args2), new Segment(args[5], args2[4])];
+                    return [new Rect(...args), new Rect(...args2)];
                 }
             } else {
                 const y = cutNum - width + this.top;
@@ -104,7 +154,7 @@
                     const x = random(width + 1) + this.left + 0.5;
                     args[5]  = [x, this.start[1] < y ? y - 0.5 : y + 0.5];
                     args2[4] = [x, this.end  [1] < y ? y - 0.5 : y + 0.5];
-                    return [new Rect(...args), new Rect(...args2), new Segment(args[5], args2[4])];
+                    return [new Rect(...args), new Rect(...args2)];
                 }
             }
         }
@@ -118,11 +168,28 @@
         constructor(start, end) {
             this.start = start;
             this.end = end;
-            console.assert(start[0] === end[0] || start[1] === end[1]);
         }
     }
 
-    Segment.prototype.isLine = true;
+    class Shuffler {
+        values = [];
+
+        push(elem) {
+            this.values.push(elem);
+        }
+
+        pull() {
+            const index = random(this.size);
+            if (index + 1 === this.size) return this.values.pop();
+            const returnee = this.values[index];
+            this.values[index] = this.values.pop();
+            return returnee;
+        }
+
+        get size() {
+            return this.values.length;
+        }
+    }
 
     function random(max) {
         return Math.floor(Math.random() * max);
