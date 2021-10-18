@@ -3,17 +3,57 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Generate unlimited free printable mazes!">
     <title>Maze generator</title>
+    <style>
+        @media print {
+            body > div > :not(canvas) {
+                display: none;
+            }
+        }
+
+        body > div {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        button {
+            padding: 5px;
+            background-color: rgb(14, 231, 14);
+            border: 1px solid black;
+            border-radius: 100px;
+            box-shadow: 0 8px 16px 0 rgba(0,0,0,0.2), 0 6px 20px 0 rgba(0,0,0,0.19);
+            margin: 10px;
+        }
+
+        button:hover {
+            background-color: rgb(0, 255, 0);
+        }
+
+        button:active {
+            background-color: rgb(17, 167, 17);
+        }
+
+        body {
+            background-color: aqua;
+        }
+    </style>
 </head>
 <body>
     <div>
-        <label>Height: <input type="number" value="50"></label>
-        <label>Width: <input type="number" value="50"></label>
-        <label>Line thickness: <input type="number" min="0.1" max="0.9" step="0.1" value="0.5"></label>
-        <button>Generate!</button>
+        <h1>Maze Generator</h1>
+        <div>
+            <label>Height: <input type="number" value="50" size="5"></label>
+            <label>Width: <input type="number" value="65" size="5"></label>
+            <label>Line thickness: <input type="number" min="0.1" max="0.9" step="0.1" value="0.5" size="5"></label>
+        </div>
+        <div>
+            <button id="generate">Generate!</button>
+            <button id="print" hidden>Print!</button>
+        </div>
+        <canvas></canvas>
     </div>
-    <br>
-    <canvas></canvas>
 </body>
 <script>
     'use strict';
@@ -22,9 +62,16 @@
     const inputs = document.querySelectorAll('input');
     const scale = 10;
 
-    let count = 0;
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Enter') drawMaze();
+    })
 
-    document.querySelector('button').addEventListener('click', () => {
+    document.querySelector('#print').addEventListener('click', () => window.print());
+
+    document.querySelector('#generate').addEventListener('click', drawMaze);
+
+    function drawMaze() {
+        document.querySelector('#print').hidden = false;
         let [height, width, thickness] = [...inputs].map(a => +a.value);
         height = Math.floor(height);
         width = Math.floor(width);
@@ -32,10 +79,10 @@
             alert('Please enter valid values');
             return;
         }
-        ctx.canvas.height = (height + 2) * scale;
-        ctx.canvas.width  = (width  + 2) * scale;
+        ctx.canvas.height = (height + 1) * scale;
+        ctx.canvas.width  = (width  + 1) * scale;
         ctx.setTransform(scale, 0, 0, scale, 0.5, 0.5);
-        ctx.fillRect(0, 0, width + 2, height + 2);
+        ctx.fillRect(0, 0, width + 1, height + 1);
         const { lines, segments } = new Maze(width, height);
         ctx.lineWidth = thickness;
         ctx.strokeStyle = '#FFFFFF';
@@ -46,7 +93,7 @@
             ctx.lineTo(...start);
             ctx.lineTo(...end);
         }
-        ctx.lineTo(width + 1, height + 2);
+        ctx.lineTo(width, height + 1);
         ctx.stroke();
         ctx.lineCap = 'square';
         for (const { start, end } of segments) {
@@ -55,17 +102,17 @@
             ctx.lineTo(...end);
             ctx.stroke();
         }
-    });
+    };
 
     class Maze {
         lines = [];
         segments = [];
 
         constructor(width, height) {
-            let current = new Rect(0.5, 1.5 + width, 0.5, 1.5 + height, [1, 1], [width + 1, height + 1]);
+            let current = new Rect(0.5, 0.5 + width, 0.5, 0.5 + height, [1, 1], [width, height]);
             const later = [];
             const grid = [];
-            for (let i = 1; i <= height + 1; i++) {
+            for (let i = 1; i <= height; i++) {
                 grid[i] = [];
             }
             while (true) {
@@ -91,7 +138,7 @@
             }
 
             const isValid = ({ end: [x, y] }) =>
-                0 < x && x <= width + 1 && 0 < y && y <= height + 1 && !grid[y][x];
+                0 < x && x <= width && 0 < y && y <= height && !grid[y][x];
 
             const potentialSegments = new Shuffler;
             grid.forEach((arr, y) => arr.forEach((_, x) => addValidAdjacentSegments(x, y)));
