@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Generate unlimited free printable mazes!">
+    <title>Maze generator</title>
+    <style>
+        body > div {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        button {
+            padding: 5px;
+            background-color: rgb(14, 231, 14);
+            border: 1px solid black;
+            border-radius: 100px;
+            box-shadow: 0 8px 16px 0 rgba(0,0,0,0.2), 0 6px 20px 0 rgba(0,0,0,0.19);
+            margin: 10px;
+        }
+
+        button:hover {
+            background-color: rgb(0, 255, 0);
+        }
+
+        button:active {
+            background-color: rgb(17, 167, 17);
+        }
+
+        body {
+            background-color: aqua;
+            margin-left: 0;
+        }
+
+        a {
+            background-color: #00d000;
+            padding: 8px;
+        }
+    </style>
+</head>
+<body>
+    <a href="..">Home</a>
+    <div>
+        <h1>Maze Generator</h1>
+        <div>
+            <label>Height: <input type="number" value="10" size="5"></label>
+            <label>Width: <input type="number" value="10" size="5"></label>
+            <label>Depth: <input type="number" value="10" size="5"></label>
+        </div>
+        <div>
+            <button id="generate">Generate!</button>
+        </div>
+    </div>
+</body>
+<script type="module">
+    import Maze from '../maze.js';
+    import * as THREE from 'https://cdn.skypack.dev/three@0.133.1';
+    import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.133.1/examples/jsm/controls/PointerLockControls';
+
+    const scene = new THREE.Scene();
+
+    const keysdown = new Set;
+    document.addEventListener('keydown', e => keysdown.add(e.code));
+    document.addEventListener('keyup', e => keysdown.delete(e.code));
+
+    let ready = true;
+    setInterval(() => {
+        if (keysdown.has('KeyW')) controls.moveForward(0.1);
+        if (keysdown.has('KeyA')) controls.moveRight(-0.1);
+        if (keysdown.has('KeyS')) controls.moveForward(-0.1);
+        if (keysdown.has('KeyD')) controls.moveRight(0.1);
+
+        if (ready) {
+            ready = false;
+            requestAnimationFrame(() => {
+                renderer.render(scene, camera);
+                ready = true;
+            });
+        }
+    }, 10);
+
+    const width = 1000, height = 800;
+
+    const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 100);
+    camera.position.set(0, 5, 3);
+
+    const pointLight = new THREE.PointLight(0xffffff, 0.2);
+    scene.add(camera);
+    camera.add(pointLight);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+
+    const renderer = new THREE.WebGLRenderer();
+    renderer.setSize(width, height);
+    document.querySelector('div').appendChild(renderer.domElement);
+
+    const controls = new PointerLockControls(camera, renderer.domElement);
+
+    renderer.domElement.addEventListener('click', () => controls.isLocked ? controls.unlock() : controls.lock());
+
+    const size = [3, 1, 3];
+    const maze = new Maze(...size);
+
+    class MazeWalls {
+        positions = [];
+        normals = [];
+        uvs = [];
+
+        constructor(walls) {
+            this.walls = walls;
+        }
+
+        createFace([x, y, z], direction, isFront) {
+            if (isFront) {
+                switch (direction) {
+                    case 0:
+                        this.positions.push(
+                            x + 1, y - 1, z + 1,
+                            x + 1, y - 1, z - 1,
+                            x + 1, y + 1, z + 1,
+                            x + 1, y + 1, z + 1,
+                            x + 1, y - 1, z - 1,
+                            x + 1, y + 1, z - 1
+                        );
+                    break; case 1:
+                        this.positions.push(
+                            x + 1, y + 1, z - 1,
+                            x - 1, y + 1, z - 1,
+                            x + 1, y + 1, z + 1,
+                            x + 1, y + 1, z + 1,
+                            x - 1, y + 1, z - 1,
+                            x - 1, y + 1, z + 1
+                        );
+                    break; case 2:
+                        this.positions.push(
+                            x - 1, y - 1, z + 1,
+                            x + 1, y - 1, z + 1,
+                            x - 1, y + 1, z + 1,
+                            x - 1, y + 1, z + 1,
+                            x + 1, y - 1, z + 1,
+                            x + 1, y + 1, z + 1
+                        );
+                }
+            } else {
+                switch (direction) {
+                    case 0:
+                        this.positions.push(
+                            x - 1, y - 1, z - 1,
+                            x - 1, y - 1, z + 1,
+                            x - 1, y + 1, z - 1,
+                            x - 1, y + 1, z - 1,
+                            x - 1, y - 1, z + 1,
+                            x - 1, y + 1, z + 1
+                        );
+                    break; case 1:
+                        this.positions.push(
+                            x + 1, y - 1, z + 1,
+                            x - 1, y - 1, z + 1,
+                            x + 1, y - 1, z - 1,
+                            x + 1, y - 1, z - 1,
+                            x - 1, y - 1, z + 1,
+                            x - 1, y - 1, z - 1
+                        );
+                    break; case 2:
+                        this.positions.push(
+                            x + 1, y - 1, z - 1,
+                            x - 1, y - 1, z - 1,
+                            x + 1, y + 1, z - 1,
+                            x + 1, y + 1, z - 1,
+                            x - 1, y - 1, z - 1,
+                            x - 1, y + 1, z - 1
+                        );
+                }
+            }
+            const normalArray = [0, 0, 0];
+            normalArray[direction] = isFront ? 1 : -1;
+            for (let i = 0; i < 6; i++) this.normals.push(...normalArray);
+            this.uvs.push(...MazeWalls.#uvArray);
+        }
+
+        toGeometry() {
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(this.positions), 3));
+            geometry.setAttribute('normal',   new THREE.BufferAttribute(new Float32Array(this.normals), 3));
+            geometry.setAttribute('uv',       new THREE.BufferAttribute(new Float32Array(this.uvs), 2));
+            return geometry;
+        }
+
+        static #uvArray = [0, 0,  1, 0,  0, 1,  0, 1,  1, 0,  1, 1];
+    }
+</script></html>

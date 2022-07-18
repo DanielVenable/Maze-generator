@@ -5,9 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Generate unlimited free printable mazes!">
     <title>Maze generator</title>
+    <link rel="icon" type="image/x-icon" href="icon.png">
     <style>
         @media print {
-            body > div > :not(canvas) {
+            body > div > :not(canvas), a {
                 display: none;
             }
         }
@@ -37,10 +38,17 @@
 
         body {
             background-color: aqua;
+            margin-left: 0;
+        }
+
+        a {
+            background-color: #00d000;
+            padding: 8px;
         }
     </style>
 </head>
 <body>
+    <a href='./3d/'>1st person mode</a>
     <div>
         <h1>Maze Generator</h1>
         <div>
@@ -56,7 +64,7 @@
     </div>
 </body>
 <script type="module">
-    import Maze from "/maze.js";
+    import Maze from "./maze.js";
 
     const ctx = document.querySelector('canvas').getContext('2d');
     const inputs = document.querySelectorAll('input');
@@ -81,19 +89,19 @@
         }
         ctx.canvas.height = (height + 1) * scale;
         ctx.canvas.width  = (width  + 1) * scale;
-        ctx.setTransform(scale, 0, 0, scale, 0.5, 0.5);
-        ctx.fillRect(0, 0, width + 1, height + 1);
+        ctx.setTransform(scale, 0, 0, scale, 10.5, 10.5);
+        ctx.fillRect(-1, -1, width + 1, height + 1);
         const { lines, segments } = new Maze(width, height);
         ctx.lineWidth = thickness;
-        ctx.strokeStyle = '#FFFFFF';
+        ctx.strokeStyle = '#ffffff';
         ctx.beginPath();
-        ctx.moveTo(1, 0);
-        ctx.stroke();
+        ctx.moveTo(0, -1);
+
         for (const { start, end } of lines) {
             ctx.lineTo(...start);
             ctx.lineTo(...end);
         }
-        ctx.lineTo(width, height + 1);
+        ctx.lineTo(width - 1, height);
         ctx.stroke();
         ctx.lineCap = 'square';
         for (const { start, end } of segments) {
@@ -102,5 +110,5 @@
             ctx.lineTo(...end);
             ctx.stroke();
         }
-    };
+    }
 </script></html>
