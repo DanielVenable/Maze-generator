@@ -185,7 +185,14 @@ class Area {
     }
 
     get isLine() {
-        return this.size.includes(0);
+        let hasNon0 = false;
+        for (const item of this.size) {
+            if (item !== 0) {
+                if (hasNon0) return false;
+                hasNon0 = true;
+            }
+        }
+        return true;
     }
 
     get dimensions() {
