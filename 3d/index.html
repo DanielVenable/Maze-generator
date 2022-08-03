@@ -84,7 +84,7 @@
     const width = 1000, height = 800;
 
     const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 100);
-    camera.position.set(0, 5, 3);
+    camera.position.set(0, 0, 0);
 
     const pointLight = new THREE.PointLight(0xffffff, 0.2);
     scene.add(camera);
@@ -109,67 +109,83 @@
 
         constructor(walls) {
             this.walls = walls;
+
+            for (let dimension = 0; dimension < 3; dimension++) {
+                walls[dimension].doOnIndicieses((indicies, isWall) => {
+                    const pos = indicies.map(a => 4 * a);
+                    pos[dimension] += 2; // so the wall is in the gap between spaces
+                    if (isWall) {
+                        this.createFaces(pos, dimension, true);
+                    } else {
+                        for (let d = 0; d < 3; d++) {
+                            if (d === dimension) continue;
+                            this.createFaces(pos, d, false);
+                        }
+                    }
+                });
+            }
         }
 
-        createFace([x, y, z], direction, isFront) {
+        createFace([x, y, z], direction, isFront, isFacingOut) {
+            const mod = isFacingOut ? 1 : -1;
             if (isFront) {
                 switch (direction) {
                     case 0:
                         this.positions.push(
-                            x + 1, y - 1, z + 1,
-                            x + 1, y - 1, z - 1,
-                            x + 1, y + 1, z + 1,
-                            x + 1, y + 1, z + 1,
-                            x + 1, y - 1, z - 1,
-                            x + 1, y + 1, z - 1
+                            x + mod, y - 1, z + 1,
+                            x + mod, y - 1, z - 1,
+                            x + mod, y + 1, z + 1,
+                            x + mod, y + 1, z + 1,
+                            x + mod, y - 1, z - 1,
+                            x + mod, y + 1, z - 1
                         );
                     break; case 1:
                         this.positions.push(
-                            x + 1, y + 1, z - 1,
-                            x - 1, y + 1, z - 1,
-                            x + 1, y + 1, z + 1,
-                            x + 1, y + 1, z + 1,
-                            x - 1, y + 1, z - 1,
-                            x - 1, y + 1, z + 1
+                            x + 1, y + mod, z - 1,
+                            x - 1, y + mod, z - 1,
+                            x + 1, y + mod, z + 1,
+                            x + 1, y + mod, z + 1,
+                            x - 1, y + mod, z - 1,
+                            x - 1, y + mod, z + 1
                         );
                     break; case 2:
                         this.positions.push(
-                            x - 1, y - 1, z + 1,
-                            x + 1, y - 1, z + 1,
-                            x - 1, y + 1, z + 1,
-                            x - 1, y + 1, z + 1,
-                            x + 1, y - 1, z + 1,
-                            x + 1, y + 1, z + 1
+                            x - 1, y - 1, z + mod,
+                            x + 1, y - 1, z + mod,
+                            x - 1, y + 1, z + mod,
+                            x - 1, y + 1, z + mod,
+                            x + 1, y - 1, z + mod,
+                            x + 1, y + 1, z + mod
                         );
                 }
             } else {
                 switch (direction) {
                     case 0:
                         this.positions.push(
-                            x - 1, y - 1, z - 1,
-                            x - 1, y - 1, z + 1,
-                            x - 1, y + 1, z - 1,
-                            x - 1, y + 1, z - 1,
-                            x - 1, y - 1, z + 1,
-                            x - 1, y + 1, z + 1
+                            x - mod, y - 1, z - 1,
+                            x - mod, y - 1, z + 1,
+                            x - mod, y + 1, z - 1,
+                            x - mod, y + 1, z - 1,
+                            x - mod, y - 1, z + 1,
+                            x - mod, y + 1, z + 1
                         );
                     break; case 1:
                         this.positions.push(
-                            x + 1, y - 1, z + 1,
-                            x - 1, y - 1, z + 1,
-                            x + 1, y - 1, z - 1,
-                            x + 1, y - 1, z - 1,
-                            x - 1, y - 1, z + 1,
-                            x - 1, y - 1, z - 1
+                            x + 1, y - mod, z + 1,
+                            x - 1, y - mod, z + 1,
+                            x + 1, y - mod, z - 1,
+                            x + 1, y - mod, z - 1,
+                            x - 1, y - mod, z + 1,
+                            x - 1, y - mod, z - 1
                         );
                     break; case 2:
                         this.positions.push(
-                            x + 1, y - 1, z - 1,
-                            x - 1, y - 1, z - 1,
-                            x + 1, y + 1, z - 1,
-                            x + 1, y + 1, z - 1,
-                            x - 1, y - 1, z - 1,
-                            x - 1, y + 1, z - 1
+                            x + 1, y - 1, z - mod,
+                            x - 1, y - 1, z - mod,
+                            x + 1, y + 1, z - mod,
+                            x + 1, y + 1, z - mod,
+                            x - 1, y - 1, z - mod,
+                            x - 1, y + 1, z - mod
                         );
                 }
             }
@@ -177,6 +193,11 @@
             normalArray[direction] = isFront ? 1 : -1;
             for (let i = 0; i < 6; i++) this.normals.push(...normalArray);
             this.uvs.push(...MazeWalls.#uvArray);
+        }
+
+        createFaces(pos, direction, isFacingOut) {
+            this.createFace(pos, direction, true, isFacingOut);
+            this.createFace(pos, direction, false, isFacingOut);
         }
 
         toGeometry() {
@@ -189,4 +210,6 @@
 
         static #uvArray = [0, 0,  1, 0,  0, 1,  0, 1,  1, 0,  1, 1];
     }
+
+    scene.add(new THREE.Mesh(new MazeWalls(maze.walls()).toGeometry(), new THREE.MeshLambertMaterial({ color: 'blue' })));
 </script></html>
