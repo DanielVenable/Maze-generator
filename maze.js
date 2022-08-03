@@ -102,53 +102,6 @@ export default class Maze {
 
         return walls;
     }
-/*
-    walls() {
-        const walls = [];
-
-        for (let d = 0; d < this.dimensions; d++) {
-            walls[d] = [];
-            for (let x = 0; x < this.lengths[d] - 1; x++) {
-                walls[d][x] = [];
-            }
-        }
-
-        let last;
-        for (const { start, end } of this.lines) {
-            if (last) {
-                unwall(last, start);
-            }
-            last = end;
-            for (let d = 0; d < this.dimensions; d++) {
-                if (start[d] !== end[d]) {
-                    for (let x = Math.min(start[d], end[d]); x < Math.max(start[d], end[d]); x++) {
-                        walls[d][x][] = false;
-                    }
-                }
-            }/*
-            if (x1 === x2) {
-                for (let y = Math.min(y1, y2); y < Math.max(y1, y2); y++) {
-                    horizontal[y][x1] = false;
-                }
-            } else if (y1 === y2) {
-                
-            }
-        }
-
-        for (const { start, end } of this.segments) {
-            unwall(start, end);
-        }
-
-        function unwall([x1, y1], [x2, y2]) {
-            if (x1 === x2) {
-                horizontal[Math.min(y1, y2)][x1] = false;
-            } else if (y1 === y2) {
-                vertical[Math.min(x1, x2)][y1] = false;
-            }
-        }
-
-        return { horizontal, vertical };
-    }*/
 }
 
 class Area {
