@@ -38,11 +38,18 @@
             background-color: #00d000;
             padding: 8px;
         }
+
+        canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: -1;
+        }
     </style>
 </head>
 <body>
     <a href="..">Home</a>
-    <div>
+    <div id="controls">
         <h1>Maze Generator</h1>
         <div>
             <label>Height: <input type="number" value="10" size="5"></label>
@@ -50,7 +57,7 @@
             <label>Depth: <input type="number" value="10" size="5"></label>
         </div>
         <div>
-            <button id="generate">Generate!</button>
+            <button id="start">Go!</button>
         </div>
     </div>
 </body>
@@ -59,48 +66,72 @@
     import * as THREE from 'https://cdn.skypack.dev/three@0.133.1';
     import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.133.1/examples/jsm/controls/PointerLockControls';
 
-    const scene = new THREE.Scene();
+    const game = {
+        keysdown: new Set,
+        renderer: new THREE.WebGLRenderer(),
+        scene: new THREE.Scene(),
+        camera: new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100),
+        material: new THREE.MeshLambertMaterial({ map: new THREE.TextureLoader().load('./wall.png') }),
+        started: false
+    };
 
-    const keysdown = new Set;
-    document.addEventListener('keydown', e => keysdown.add(e.code));
-    document.addEventListener('keyup', e => keysdown.delete(e.code));
+    {
+        game.renderer.setSize(window.innerWidth, window.innerHeight);
+        window.addEventListener('resize', () => {
+            game.renderer.setSize(window.innerWidth, window.innerHeight);
+            game.camera.aspect = window.innerWidth / window.innerHeight;
+            game.camera.updateProjectionMatrix();
+        });
 
-    let ready = true;
-    setInterval(() => {
-        if (keysdown.has('KeyW')) controls.moveForward(0.1);
-        if (keysdown.has('KeyA')) controls.moveRight(-0.1);
-        if (keysdown.has('KeyS')) controls.moveForward(-0.1);
-        if (keysdown.has('KeyD')) controls.moveRight(0.1);
+        document.body.appendChild(game.renderer.domElement);
 
-        if (ready) {
-            ready = false;
-            requestAnimationFrame(() => {
-                renderer.render(scene, camera);
-                ready = true;
-            });
+        document.addEventListener('keydown', e => game.keysdown.add(e.code));
+        document.addEventListener('keyup', e => game.keysdown.delete(e.code));
+
+        game.scene.add(game.camera);
+        const light = new THREE.PointLight(0xffffff, 0.6, 10, 2)
+        light.position.set(1, 1, 1)
+        game.camera.add(light);
+        game.scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+
+        game.controls = new PointerLockControls(game.camera, game.renderer.domElement);
+
+        game.renderer.domElement.addEventListener('click',
+            () => game.controls.isLocked ? game.controls.unlock() : game.controls.lock());
+        document.querySelector('#start').addEventListener('click', start);
+    }
+
+    function loop() {
+        requestAnimationFrame(() => {
+            if (game.keysdown.has('KeyW')) game.controls.moveForward(0.5);
+            game.renderer.render(game.scene, game.camera);
+            loop();
+        });
+    }
+
+    function start() {
+        const size = [...document.querySelectorAll('input')].map(input => Math.floor(input.value));
+        if (!size.every(a => a > 0)) {
+            alert('Please enter valid values');
+            return;
         }
-    }, 10);
 
-    const width = 1000, height = 800;
+        if (game.started) {
+            game.scene.remove(game.mesh);
+            game.geometry.dispose();
+        } else {
+            game.started = true;
+            loop();
+        }
 
-    const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 100);
-    camera.position.set(0, 0, 0);
+        game.camera.position.set(0, 0, 0);
+        game.camera.lookAt(1, 0, 1);
 
-    const pointLight = new THREE.PointLight(0xffffff, 0.2);
-    scene.add(camera);
-    camera.add(pointLight);
-    scene.add(new THREE.AmbientLight(0xffffff, 0.2));
-
-    const renderer = new THREE.WebGLRenderer();
-    renderer.setSize(width, height);
-    document.querySelector('div').appendChild(renderer.domElement);
-
-    const controls = new PointerLockControls(camera, renderer.domElement);
-
-    renderer.domElement.addEventListener('click', () => controls.isLocked ? controls.unlock() : controls.lock());
-
-    const size = [3, 3, 3];
-    const maze = new Maze(...size);
+        game.maze = new Maze(...size);
+        game.geometry = new MazeWalls(game.maze).toGeometry();
+        game.mesh = new THREE.Mesh(game.geometry, game.material);
+        game.scene.add(game.mesh);
+    }
 
     class MazeWalls {
         positions = [];
@@ -223,6 +254,4 @@
 
         static #uvArray = [0, 0,  1, 0,  0, 1,  0, 1,  1, 0,  1, 1];
     }
-
-    scene.add(new THREE.Mesh(new MazeWalls(maze).toGeometry(), new THREE.MeshLambertMaterial({ color: 'blue' })));
 </script></html>
