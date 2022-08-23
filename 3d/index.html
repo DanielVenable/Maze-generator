@@ -6,10 +6,11 @@
     <meta name="description" content="Generate unlimited free printable mazes!">
     <title>Maze generator</title>
     <style>
-        body > div {
+        #controls:not([hidden]) {
             display: flex;
             flex-direction: column;
             align-items: center;
+            color: white;
         }
 
         button {
@@ -18,7 +19,6 @@
             border: 1px solid black;
             border-radius: 100px;
             box-shadow: 0 8px 16px 0 rgba(0,0,0,0.2), 0 6px 20px 0 rgba(0,0,0,0.19);
-            margin: 10px;
         }
 
         button:hover {
@@ -30,13 +30,15 @@
         }
 
         body {
-            background-color: aqua;
-            margin-left: 0;
+            background-color: black;
         }
 
         a {
             background-color: #00d000;
             padding: 8px;
+            position: fixed;
+            top: 0;
+            right: 0;
         }
 
         canvas {
@@ -45,6 +47,13 @@
             left: 0;
             z-index: -1;
         }
+
+        #position {
+            position: fixed;
+            top: 2px;
+            left: 2px;
+            color: white;
+        }
     </style>
 </head>
 <body>
@@ -52,14 +61,18 @@
     <div id="controls">
         <h1>Maze Generator</h1>
         <div>
-            <label>Height: <input type="number" value="10" size="5"></label>
-            <label>Width: <input type="number" value="10" size="5"></label>
-            <label>Depth: <input type="number" value="10" size="5"></label>
+            <label>Height: <input type="number" value="5" size="5"></label>
+            <label>Width: <input type="number" value="5" size="5"></label>
+            <label>Depth: <input type="number" value="5" size="5"></label>
         </div>
+        <p>
+            Space: Move&emsp;Mouse: Look
+        </p>
         <div>
             <button id="start">Go!</button>
         </div>
     </div>
+    <span id="position" hidden>Position: <span id="coords">0,0,0</span></span>
 </body>
 <script type="module">
     import Maze from '../maze.js';
@@ -67,12 +80,40 @@
     import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.133.1/examples/jsm/controls/PointerLockControls';
 
     const game = {
-        keysdown: new Set,
+        SPEED: 3,
+        isSpaceDown: false,
         renderer: new THREE.WebGLRenderer(),
         scene: new THREE.Scene(),
         camera: new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100),
         material: new THREE.MeshLambertMaterial({ map: new THREE.TextureLoader().load('./wall.png') }),
-        started: false
+        controls: null,
+        clock: new THREE.Clock(),
+        direction: new THREE.Vector3(),
+        gridDirection: {
+            dim: null,
+            sign: 0
+        },
+        gridPosition: null,
+        motion: {
+            offset: 0,
+            dim: null,
+            isStopped: false
+        },
+        walls: null,
+        started: false,
+        updateDirection() {
+            this.controls.getDirection(this.direction);
+            const arr = [...this.direction];
+            let highestDir, highestSize = 0;
+            for (let i = 0; i < 3; i++) {
+                if (Math.abs(arr[i]) > Math.abs(highestSize)) {
+                    highestSize = arr[i];
+                    highestDir = i;
+                }
+            }
+            this.gridDirection.dim = highestDir;
+            this.gridDirection.sign = Math.sign(highestSize);
+        }
     };
 
     {
@@ -85,16 +126,21 @@
 
         document.body.appendChild(game.renderer.domElement);
 
-        document.addEventListener('keydown', e => game.keysdown.add(e.code));
-        document.addEventListener('keyup', e => game.keysdown.delete(e.code));
+        game.renderer.render(game.scene, game.camera);
 
+        document.addEventListener('keydown', e => { if (e.code === 'Space') game.isSpaceDown = true; });
+        document.addEventListener('keyup',   e => { if (e.code === 'Space') game.isSpaceDown = false; });
+
+        const light = new THREE.PointLight(0xffffff, 0.7, 10, 2);
+        light.position.set(1, 1, 1);
         game.scene.add(game.camera);
-        const light = new THREE.PointLight(0xffffff, 0.6, 10, 2)
-        light.position.set(1, 1, 1)
         game.camera.add(light);
         game.scene.add(new THREE.AmbientLight(0xffffff, 0.2));
 
         game.controls = new PointerLockControls(game.camera, game.renderer.domElement);
+
+        game.controls.addEventListener('lock', () => document.querySelector('#controls').hidden = true);
+        game.controls.addEventListener('unlock', () => document.querySelector('#controls').hidden = false);
 
         game.renderer.domElement.addEventListener('click',
             () => game.controls.isLocked ? game.controls.unlock() : game.controls.lock());
@@ -103,32 +149,91 @@
 
     function loop() {
         requestAnimationFrame(() => {
-            if (game.keysdown.has('KeyW')) game.controls.moveForward(0.5);
+            updatePosition();
             game.renderer.render(game.scene, game.camera);
             loop();
         });
     }
 
+    function updatePosition() {
+        const delta = game.clock.getDelta();
+        if (!game.isSpaceDown) return;
+        game.updateDirection();
+
+        if (game.motion.offset === 0) {
+            if (isWall()) return;
+            game.motion.dim = game.gridDirection.dim;
+        }
+
+        if (game.gridDirection.dim === game.motion.dim) {
+            move(game.gridDirection.sign * delta * game.SPEED);
+        } else {
+            move(-Math.sign(game.motion.offset) * delta * game.SPEED);
+        }
+
+        function move(distance) {
+            const before = Math.sign(game.motion.offset);
+            game.motion.offset += distance;
+
+            if (before * Math.sign(game.motion.offset) === -1) stopIfShould();
+
+            while (game.motion.offset < -2) {
+                game.motion.offset += 4;
+                game.gridPosition[game.motion.dim]--;
+                if (game.motion.offset < 0) stopIfShould();
+            }
+            while (game.motion.offset > 2) {
+                game.motion.offset -= 4;
+                game.gridPosition[game.motion.dim]++;
+                if (game.motion.offset > 0) stopIfShould();
+            }
+
+            function stopIfShould() {
+                if (game.motion.dim !== game.gridDirection.dim ||
+                        isWall({ sign: Math.sign(distance), dim: game.motion.dim })) {
+                    game.motion.offset = 0;
+                }
+            }
+        }
+
+        function isWall({ sign, dim } = game.gridDirection) {
+            const pos = [...game.gridPosition];
+            if (sign < 0) pos[dim]--;
+            return [-1, game.mazeWalls.size[dim] - 1].includes(pos[dim]) ||
+                game.mazeWalls.walls[dim].getElement(pos);
+        }
+
+        const pos = game.gridPosition.map(
+            (value, index) => value * 4 + (index === game.motion.dim ? game.motion.offset : 0));
+
+        document.querySelector('#coords').textContent = game.gridPosition;
+        game.camera.position.fromArray(pos);
+    }
+
     function start() {
-        const size = [...document.querySelectorAll('input')].map(input => Math.floor(input.value));
+        const size = [...document.querySelectorAll('input')].map(({ value }) => Math.floor(value));
         if (!size.every(a => a > 0)) {
             alert('Please enter valid values');
             return;
         }
+
+        game.controls.lock();
 
         if (game.started) {
             game.scene.remove(game.mesh);
             game.geometry.dispose();
         } else {
             game.started = true;
+            document.querySelector('#position').hidden = false;
             loop();
         }
 
+        game.gridPosition = [0, 0, 0];
         game.camera.position.set(0, 0, 0);
         game.camera.lookAt(1, 0, 1);
 
-        game.maze = new Maze(...size);
-        game.geometry = new MazeWalls(game.maze).toGeometry();
+        game.mazeWalls = new MazeWalls(new Maze(...size));
+        game.geometry = game.mazeWalls.toGeometry();
         game.mesh = new THREE.Mesh(game.geometry, game.material);
         game.scene.add(game.mesh);
     }
@@ -152,13 +257,13 @@
                     else for (const d of otherDims) this.createFaces(pos, d, false);
                 });
 
-                for (const x of [-2, this.size[dimension] * 4 + 2]) {
-                    for (let y = 0; y <= this.size[otherDims[0]] * 4; y += 2) {
-                        for (let z = 0; z <= this.size[otherDims[1]] * 4; z += 2) {
-                            if (dimension === 2 &&
-                                x === this.size[dimension] * 4 + 2 &&
-                                y === this.size[otherDims[0]] * 4 &&
-                                z === this.size[otherDims[1]] * 4) continue;
+                const maxX = this.size[dimension] * 4 - 2,
+                    maxY = this.size[otherDims[0]] * 4 - 4,
+                    maxZ = this.size[otherDims[1]] * 4 - 4;
+                for (const x of [-2, maxX]) {
+                    for (let y = 0; y <= maxY; y += 2) {
+                        for (let z = 0; z <= maxZ; z += 2) {
+                            if (dimension === 2 && x === maxX && y === maxY && z === maxZ) continue;
                             const arr = [];
                             arr[dimension] = x;
                             arr[otherDims[0]] = y;
