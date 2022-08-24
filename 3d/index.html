@@ -106,7 +106,7 @@
         material: new THREE.MeshLambertMaterial({ map: new THREE.TextureLoader().load('./wall.png') }),
         winLight: new THREE.PointLight(0x0000ff, 15, 3, 2),
         controls: null,
-        clock: new THREE.Clock(),
+        clock: null,
         direction: new THREE.Vector3(),
         gridDirection: {
             dim: null,
@@ -266,14 +266,16 @@
         if (game.started) {
             game.scene.remove(game.mesh);
             game.geometry.dispose();
+            game.won = false;
         } else {
             game.started = true;
             document.querySelector('#data').hidden = false;
             loop();
         }
 
-        elems.pos.textContent = '0,0,0';
+        game.clock = new THREE.Clock();
         elems.time.textContent = '0:0';
+        elems.pos.textContent = '0,0,0';
         game.gridPosition = [0, 0, 0];
         game.camera.position.set(0, 0, 0);
         game.camera.lookAt(1, 0, 1);
