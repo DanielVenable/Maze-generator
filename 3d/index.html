@@ -6,7 +6,11 @@
     <meta name="description" content="Generate unlimited free printable mazes!">
     <title>Maze generator</title>
     <style>
-        #controls:not([hidden]) {
+        #controls {
+            display: none;
+        }
+
+        #win[hidden] + #controls:not([hidden]), #win:not([hidden]) {
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -15,18 +19,18 @@
 
         button {
             padding: 5px;
-            background-color: rgb(14, 231, 14);
+            background-color: #0ee70e;
             border: 1px solid black;
             border-radius: 100px;
-            box-shadow: 0 8px 16px 0 rgba(0,0,0,0.2), 0 6px 20px 0 rgba(0,0,0,0.19);
+            box-shadow: 0 8px 16px 0 #00000033, 0 6px 20px 0 #00000030;
         }
 
         button:hover {
-            background-color: rgb(0, 255, 0);
+            background-color: #00ff00;
         }
 
         button:active {
-            background-color: rgb(17, 167, 17);
+            background-color: #11a711;
         }
 
         body {
@@ -48,7 +52,7 @@
             z-index: -1;
         }
 
-        #position {
+        #data {
             position: fixed;
             top: 2px;
             left: 2px;
@@ -58,12 +62,19 @@
 </head>
 <body>
     <a href="..">2D</a>
+    <div id="win" hidden>
+        <h2>Congratulations!</h2>
+        <h3>You solved a <span id="size"></span> maze in <span id="total-time"></span>!</h3>
+        <p>
+            <button>Continue</button>
+        </p>
+    </div>
     <div id="controls">
         <h1>Maze Generator 3D</h1>
         <div>
-            <label>Height: <input type="number" value="5" size="5"></label>
-            <label>Width: <input type="number" value="5" size="5"></label>
-            <label>Depth: <input type="number" value="5" size="5"></label>
+            <label>Width:  <input type="number" value="3" size="5"></label>
+            <label>Height: <input type="number" value="3" size="5"></label>
+            <label>Depth:  <input type="number" value="3" size="5"></label>
         </div>
         <p>
             Space: Move&emsp;Mouse: Look
@@ -72,10 +83,14 @@
             Get to the blue light at the far corner to win
         </div>
         <p>
-            <button id="start">Go!</button>
+            <button>Generate!</button>
         </p>
     </div>
-    <span id="position" hidden>Position: <span id="coords"></span></span>
+    <div id="data" hidden>
+        Position: <span id="pos"></span>
+        <br>
+        Time: <span id="time"></span>
+    </div>
 </body>
 <script type="module">
     import Maze from '../maze.js';
@@ -105,6 +120,7 @@
         },
         walls: null,
         started: false,
+        won: false,
         updateDirection() {
             this.controls.getDirection(this.direction);
             const arr = [...this.direction];
@@ -121,12 +137,18 @@
     };
 
     const elems = {
-        position: document.querySelector('#position'),
-        controls: document.querySelector('#controls'),
-        coords:   document.querySelector('#coords')
+        controls:  document.querySelector('#controls'),
+        pos:       document.querySelector('#pos'),
+        time:      document.querySelector('#time'),
+        win:       document.querySelector('#win'),
+        size:      document.querySelector('#size'),
+        totalTime: document.querySelector('#total-time')
     };
 
     {
+        document.querySelector('#controls button').addEventListener('click', start);
+        document.querySelector('#win button').addEventListener('click', () => elems.win.hidden = true);
+
         game.renderer.setSize(window.innerWidth, window.innerHeight);
         window.addEventListener('resize', () => {
             game.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -155,7 +177,6 @@
 
         game.renderer.domElement.addEventListener('click',
             () => game.controls.isLocked ? game.controls.unlock() : game.controls.lock());
-        document.querySelector('#start').addEventListener('click', start);
     }
 
     function loop() {
@@ -167,7 +188,10 @@
     }
 
     function updatePosition() {
-        const delta = game.clock.getDelta();
+        const delta = game.clock.getDelta(),
+            mins = Math.floor(game.clock.elapsedTime / 60),
+            secs = Math.floor(game.clock.elapsedTime % 60);
+        elems.time.textContent = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
         if (!game.isSpaceDown) return;
         game.updateDirection();
 
@@ -217,8 +241,17 @@
         const pos = game.gridPosition.map(
             (value, index) => value * 4 + (index === game.motion.dim ? game.motion.offset : 0));
 
-        elems.coords.textContent = game.gridPosition;
+        elems.pos.textContent = game.gridPosition;
         game.camera.position.fromArray(pos);
+
+        if (!game.won && game.gridPosition.every((value, index) => game.mazeWalls.size[index] === value + 1)) {
+            elems.win.hidden = false;
+            elems.size.textContent = game.mazeWalls.size.join('x');
+            elems.totalTime.textContent =
+                `${mins} minute${mins === 1 ? '' : 's'} and ${secs} second${secs === 1 ? '' : 's'}`;
+            game.won = true;
+            game.controls.unlock();
+        }
     }
 
     function start() {
@@ -235,11 +268,12 @@
             game.geometry.dispose();
         } else {
             game.started = true;
-            elems.position.hidden = false;
+            document.querySelector('#data').hidden = false;
             loop();
         }
 
-        elems.coords.textContent = '0,0,0';
+        elems.pos.textContent = '0,0,0';
+        elems.time.textContent = '0:0';
         game.gridPosition = [0, 0, 0];
         game.camera.position.set(0, 0, 0);
         game.camera.lookAt(1, 0, 1);
@@ -270,13 +304,9 @@
                     else for (const d of otherDims) this.createFaces(pos, d, false);
                 });
 
-                const maxX = this.size[dimension] * 4 - 2,
-                    maxY = this.size[otherDims[0]] * 4 - 4,
-                    maxZ = this.size[otherDims[1]] * 4 - 4;
-                for (const x of [-2, maxX]) {
-                    for (let y = 0; y <= maxY; y += 2) {
-                        for (let z = 0; z <= maxZ; z += 2) {
-                            //if (dimension === 2 && x === maxX && y === maxY && z === maxZ) continue;
+                for (const x of [-2, this.size[dimension] * 4 - 2]) {
+                    for (let y = 0; y <= this.size[otherDims[0]] * 4 - 4; y += 2) {
+                        for (let z = 0; z <= this.size[otherDims[1]] * 4 - 4; z += 2) {
                             const arr = [];
                             arr[dimension] = x;
                             arr[otherDims[0]] = y;
