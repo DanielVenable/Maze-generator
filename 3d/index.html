@@ -57,9 +57,9 @@
     </style>
 </head>
 <body>
-    <a href="..">Home</a>
+    <a href="..">2D</a>
     <div id="controls">
-        <h1>Maze Generator</h1>
+        <h1>Maze Generator 3D</h1>
         <div>
             <label>Height: <input type="number" value="5" size="5"></label>
             <label>Width: <input type="number" value="5" size="5"></label>
@@ -69,10 +69,13 @@
             Space: Move&emsp;Mouse: Look
         </p>
         <div>
-            <button id="start">Go!</button>
+            Get to the blue light at the far corner to win
         </div>
+        <p>
+            <button id="start">Go!</button>
+        </p>
     </div>
-    <span id="position" hidden>Position: <span id="coords">0,0,0</span></span>
+    <span id="position" hidden>Position: <span id="coords"></span></span>
 </body>
 <script type="module">
     import Maze from '../maze.js';
@@ -86,6 +89,7 @@
         scene: new THREE.Scene(),
         camera: new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100),
         material: new THREE.MeshLambertMaterial({ map: new THREE.TextureLoader().load('./wall.png') }),
+        winLight: new THREE.PointLight(0x0000ff, 15, 3, 2),
         controls: null,
         clock: new THREE.Clock(),
         direction: new THREE.Vector3(),
@@ -116,6 +120,12 @@
         }
     };
 
+    const elems = {
+        position: document.querySelector('#position'),
+        controls: document.querySelector('#controls'),
+        coords:   document.querySelector('#coords')
+    };
+
     {
         game.renderer.setSize(window.innerWidth, window.innerHeight);
         window.addEventListener('resize', () => {
@@ -136,11 +146,12 @@
         game.scene.add(game.camera);
         game.camera.add(light);
         game.scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+        game.scene.add(game.winLight);
 
         game.controls = new PointerLockControls(game.camera, game.renderer.domElement);
 
-        game.controls.addEventListener('lock', () => document.querySelector('#controls').hidden = true);
-        game.controls.addEventListener('unlock', () => document.querySelector('#controls').hidden = false);
+        game.controls.addEventListener('lock', () => elems.controls.hidden = true);
+        game.controls.addEventListener('unlock', () => elems.controls.hidden = false);
 
         game.renderer.domElement.addEventListener('click',
             () => game.controls.isLocked ? game.controls.unlock() : game.controls.lock());
@@ -206,7 +217,7 @@
         const pos = game.gridPosition.map(
             (value, index) => value * 4 + (index === game.motion.dim ? game.motion.offset : 0));
 
-        document.querySelector('#coords').textContent = game.gridPosition;
+        elems.coords.textContent = game.gridPosition;
         game.camera.position.fromArray(pos);
     }
 
@@ -224,10 +235,11 @@
             game.geometry.dispose();
         } else {
             game.started = true;
-            document.querySelector('#position').hidden = false;
+            elems.position.hidden = false;
             loop();
         }
 
+        elems.coords.textContent = '0,0,0';
         game.gridPosition = [0, 0, 0];
         game.camera.position.set(0, 0, 0);
         game.camera.lookAt(1, 0, 1);
@@ -236,6 +248,7 @@
         game.geometry = game.mazeWalls.toGeometry();
         game.mesh = new THREE.Mesh(game.geometry, game.material);
         game.scene.add(game.mesh);
+        game.winLight.position.set(...game.mazeWalls.size.map(a => 4 * a - 4));
     }
 
     class MazeWalls {
@@ -263,7 +276,7 @@
                 for (const x of [-2, maxX]) {
                     for (let y = 0; y <= maxY; y += 2) {
                         for (let z = 0; z <= maxZ; z += 2) {
-                            if (dimension === 2 && x === maxX && y === maxY && z === maxZ) continue;
+                            //if (dimension === 2 && x === maxX && y === maxY && z === maxZ) continue;
                             const arr = [];
                             arr[dimension] = x;
                             arr[otherDims[0]] = y;
