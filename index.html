@@ -6,50 +6,10 @@
     <meta name="description" content="Generate unlimited free printable mazes!">
     <title>Maze generator</title>
     <link rel="icon" type="image/x-icon" href="icon.png">
-    <style>
-        @media print {
-            body > div > :not(canvas), a {
-                display: none;
-            }
-        }
-
-        body > div {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        button {
-            padding: 5px;
-            background-color: rgb(14, 231, 14);
-            border: 1px solid black;
-            border-radius: 100px;
-            box-shadow: 0 8px 16px 0 rgba(0,0,0,0.2), 0 6px 20px 0 rgba(0,0,0,0.19);
-            margin: 10px;
-        }
-
-        button:hover {
-            background-color: rgb(0, 255, 0);
-        }
-
-        button:active {
-            background-color: rgb(17, 167, 17);
-        }
-
-        body {
-            background-color: aqua;
-        }
-
-        a {
-            background-color: #00d000;
-            padding: 8px;
-            position: fixed;
-            top: 0;
-            right: 0;
-        }
-    </style>
+    <link rel="stylesheet" href="style.css">
+    <script src="2d.js" type="module" defer></script>
 </head>
-<body>
+<body class="twoD">
     <a href='./3d/'>3D</a>
     <div>
         <h1>Maze Generator</h1>
@@ -65,52 +25,4 @@
         <canvas></canvas>
     </div>
 </body>
-<script type="module">
-    import Maze from "./maze.js";
-
-    const ctx = document.querySelector('canvas').getContext('2d');
-    const inputs = document.querySelectorAll('input');
-    const scale = 10;
-
-    document.addEventListener('keydown', e => {
-        if (e.key === 'Enter') drawMaze();
-    })
-
-    document.querySelector('#print').addEventListener('click', () => window.print());
-
-    document.querySelector('#generate').addEventListener('click', drawMaze);
-
-    function drawMaze() {
-        document.querySelector('#print').hidden = false;
-        let [height, width, thickness] = [...inputs].map(a => +a.value);
-        height = Math.floor(height);
-        width = Math.floor(width);
-        if (!(height > 0 && width > 0 && 0 < thickness && thickness < 1)) {
-            alert('Please enter valid values');
-            return;
-        }
-        ctx.canvas.height = (height + 1) * scale;
-        ctx.canvas.width  = (width  + 1) * scale;
-        ctx.setTransform(scale, 0, 0, scale, 10.5, 10.5);
-        ctx.fillRect(-1, -1, width + 1, height + 1);
-        const { lines, segments } = new Maze(width, height);
-        ctx.lineWidth = thickness;
-        ctx.strokeStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.moveTo(0, -1);
-
-        for (const { start, end } of lines) {
-            ctx.lineTo(...start);
-            ctx.lineTo(...end);
-        }
-        ctx.lineTo(width - 1, height);
-        ctx.stroke();
-        ctx.lineCap = 'square';
-        for (const { start, end } of segments) {
-            ctx.beginPath();
-            ctx.moveTo(...start);
-            ctx.lineTo(...end);
-            ctx.stroke();
-        }
-    }
-</script></html>
+</html>

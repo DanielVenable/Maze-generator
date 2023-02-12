@@ -1,0 +1,72 @@
+@media print {
+    .twoD > div > :not(canvas), .twoD a {
+        display: none;
+    }
+}
+
+body.twoD > div {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+#controls {
+    display: none;
+}
+
+#win[hidden] + #controls:not([hidden]), #win:not([hidden]) {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: white;
+}
+
+button {
+    padding: 5px;
+    background-color: #0ee70e;
+    border: 1px solid black;
+    border-radius: 100px;
+    box-shadow: 0 8px 16px 0 #00000033, 0 6px 20px 0 #00000030;
+}
+
+button:hover {
+    background-color: #00ff00;
+}
+
+button:active {
+    background-color: #11a711;
+}
+
+.twoD button {
+    margin: 10px;
+}
+
+body.threeD {
+    background-color: black;
+}
+
+body.twoD {
+    background-color: aqua;
+}
+
+a {
+    background-color: #00d000;
+    padding: 8px;
+    position: fixed;
+    top: 0;
+    right: 0;
+}
+
+.threeD canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: -1;
+}
+
+#data {
+    position: fixed;
+    top: 2px;
+    left: 2px;
+    color: white;
+}
