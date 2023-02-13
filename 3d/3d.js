@@ -2,30 +2,97 @@ import Maze from '../maze.js';
 import * as THREE from 'https://cdn.skypack.dev/three@0.133.1';
 import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.133.1/examples/jsm/controls/PointerLockControls';
 
-const game = {
-    SPEED: 3,
-    isSpaceDown: false,
-    renderer: new THREE.WebGLRenderer(),
-    scene: new THREE.Scene(),
-    camera: new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100),
-    material: new THREE.MeshLambertMaterial({ map: new THREE.TextureLoader().load('./wall.png') }),
-    winLight: new THREE.PointLight(0x0000ff, 15, 3, 2),
-    controls: null,
-    clock: null,
-    direction: new THREE.Vector3(),
-    gridDirection: {
+class Game {
+    isSpaceDown = false;
+    renderer = new THREE.WebGLRenderer();
+    scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+    material = new THREE.MeshLambertMaterial({ map: new THREE.TextureLoader().load('./wall.png') });
+    winLight = new THREE.PointLight(0x0000ff, 15, 3, 2);
+    controls = null;
+    clock = null;
+    direction = new THREE.Vector3();
+    gridDirection = {
         dim: null,
         sign: 0
-    },
-    gridPosition: null,
-    motion: {
+    };
+    gridPosition = null;
+    motion = {
         offset: 0,
         dim: null,
         isStopped: false
-    },
-    walls: null,
-    started: false,
-    won: false,
+    };
+    walls = null;
+    started = false;
+    won = false;
+
+    constructor() {
+        document.querySelector('#controls button').addEventListener('click', () => this.start());
+        document.querySelector('#win button').addEventListener('click', () => elems.win.hidden = true);
+    
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        window.addEventListener('resize', () => {
+            this.renderer.setSize(window.innerWidth, window.innerHeight);
+            this.camera.aspect = window.innerWidth / window.innerHeight;
+            this.camera.updateProjectionMatrix();
+        });
+    
+        document.body.appendChild(this.renderer.domElement);
+    
+        this.renderer.render(this.scene, this.camera);
+    
+        document.addEventListener('keydown', e => { if (e.code === 'Space') this.isSpaceDown = true; });
+        document.addEventListener('keyup',   e => { if (e.code === 'Space') this.isSpaceDown = false; });
+    
+        const light = new THREE.PointLight(0xffffff, 0.7, 10, 2);
+        light.position.set(1, 1, 1);
+        this.scene.add(this.camera);
+        this.camera.add(light);
+        this.scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+        this.scene.add(this.winLight);
+    
+        this.controls = new PointerLockControls(this.camera, this.renderer.domElement);
+    
+        this.controls.addEventListener('lock', () => elems.controls.hidden = true);
+        this.controls.addEventListener('unlock', () => elems.controls.hidden = false);
+    
+        this.renderer.domElement.addEventListener('click',
+            () => this.controls.isLocked ? this.controls.unlock() : this.controls.lock());
+    }
+
+    start() {
+        const size = [...document.querySelectorAll('input')].map(({ value }) => Math.floor(value));
+        if (!size.every(a => a > 0)) {
+            alert('Please enter valid values');
+            return;
+        }
+    
+        this.controls.lock();
+    
+        if (this.started) {
+            this.scene.remove(this.mesh);
+            this.geometry.dispose();
+            this.won = false;
+        } else {
+            this.started = true;
+            document.querySelector('#data').hidden = false;
+            this.loop();
+        }
+    
+        this.clock = new THREE.Clock();
+        elems.time.textContent = '0:0';
+        elems.pos.textContent = '0,0,0';
+        this.gridPosition = [0, 0, 0];
+        this.camera.position.set(0, 0, 0);
+        this.camera.lookAt(1, 0, 1);
+    
+        this.mazeWalls = new MazeWalls(new Maze(...size));
+        this.geometry = this.mazeWalls.toGeometry();
+        this.mesh = new THREE.Mesh(this.geometry, this.material);
+        this.scene.add(this.mesh);
+        this.winLight.position.set(...this.mazeWalls.size.map(a => 4 * a - 4));
+    }
+
     updateDirection() {
         this.controls.getDirection(this.direction);
         const arr = [...this.direction];
@@ -39,7 +106,91 @@ const game = {
         this.gridDirection.dim = highestDir;
         this.gridDirection.sign = Math.sign(highestSize);
     }
-};
+
+    loop() {
+        requestAnimationFrame(() => {
+            this.updatePosition();
+            this.renderer.render(this.scene, this.camera);
+            this.loop();
+        });
+    }
+
+    updatePosition() {
+        const delta = this.clock.getDelta(),
+            mins = Math.floor(this.clock.elapsedTime / 60),
+            secs = Math.floor(this.clock.elapsedTime % 60);
+        elems.time.textContent = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+        if (!this.isSpaceDown) return;
+        this.updateDirection();
+
+        if (this.motion.offset === 0) {
+            if (this.isWall()) return;
+            this.motion.dim = this.gridDirection.dim;
+        }
+
+        if (this.gridDirection.dim === this.motion.dim) {
+            this.move(this.gridDirection.sign * delta * Game.SPEED);
+        } else {
+            this.move(-Math.sign(this.motion.offset) * delta * Game.SPEED);
+        }
+
+        const pos = this.gridPosition.map(
+            (value, index) => value * 4 + (index === this.motion.dim ? this.motion.offset : 0));
+
+        elems.pos.textContent = this.gridPosition;
+        this.camera.position.fromArray(pos);
+
+        if (!this.won && this.gridPosition.every(
+                (value, index) => this.mazeWalls.size[index] === value + 1)) {
+            elems.win.hidden = false;
+            elems.size.textContent = this.mazeWalls.size.join('x');
+            elems.totalTime.textContent =
+                `${mins} minute${mins === 1 ? '' : 's'} and ${secs} second${secs === 1 ? '' : 's'}`;
+            this.won = true;
+            this.controls.unlock();
+        }
+    }
+    
+    move(distance) {
+        const before = Math.sign(this.motion.offset);
+        this.motion.offset += distance;
+
+        if (before * Math.sign(this.motion.offset) === -1) {
+            this.stopIfShould();
+        }
+
+        while (this.motion.offset < -2) {
+            this.motion.offset += 4;
+            this.gridPosition[this.motion.dim]--;
+            if (this.motion.offset < 0) {
+                this.stopIfShould();
+            }
+        }
+        while (this.motion.offset > 2) {
+            this.motion.offset -= 4;
+            this.gridPosition[this.motion.dim]++;
+            if (this.motion.offset > 0) {
+                this.stopIfShould();
+            }
+        }
+    }
+
+    stopIfShould() {
+        if (this.motion.dim !== this.gridDirection.dim ||
+                this.isWall({ sign: Math.sign(distance), dim: this.motion.dim })) {
+            this.motion.offset = 0;
+        }
+    }
+
+    isWall({ sign, dim } = this.gridDirection) {
+        const pos = [...this.gridPosition];
+        if (sign < 0) pos[dim]--;
+        return [-1, this.mazeWalls.size[dim] - 1].includes(pos[dim]) ||
+            this.mazeWalls.walls[dim].getElement(pos);
+    }
+
+    static SPEED = 3;
+}
 
 const elems = {
     controls:  document.querySelector('#controls'),
@@ -49,148 +200,6 @@ const elems = {
     size:      document.querySelector('#size'),
     totalTime: document.querySelector('#total-time')
 };
-
-{
-    document.querySelector('#controls button').addEventListener('click', start);
-    document.querySelector('#win button').addEventListener('click', () => elems.win.hidden = true);
-
-    game.renderer.setSize(window.innerWidth, window.innerHeight);
-    window.addEventListener('resize', () => {
-        game.renderer.setSize(window.innerWidth, window.innerHeight);
-        game.camera.aspect = window.innerWidth / window.innerHeight;
-        game.camera.updateProjectionMatrix();
-    });
-
-    document.body.appendChild(game.renderer.domElement);
-
-    game.renderer.render(game.scene, game.camera);
-
-    document.addEventListener('keydown', e => { if (e.code === 'Space') game.isSpaceDown = true; });
-    document.addEventListener('keyup',   e => { if (e.code === 'Space') game.isSpaceDown = false; });
-
-    const light = new THREE.PointLight(0xffffff, 0.7, 10, 2);
-    light.position.set(1, 1, 1);
-    game.scene.add(game.camera);
-    game.camera.add(light);
-    game.scene.add(new THREE.AmbientLight(0xffffff, 0.2));
-    game.scene.add(game.winLight);
-
-    game.controls = new PointerLockControls(game.camera, game.renderer.domElement);
-
-    game.controls.addEventListener('lock', () => elems.controls.hidden = true);
-    game.controls.addEventListener('unlock', () => elems.controls.hidden = false);
-
-    game.renderer.domElement.addEventListener('click',
-        () => game.controls.isLocked ? game.controls.unlock() : game.controls.lock());
-}
-
-function loop() {
-    requestAnimationFrame(() => {
-        updatePosition();
-        game.renderer.render(game.scene, game.camera);
-        loop();
-    });
-}
-
-function updatePosition() {
-    const delta = game.clock.getDelta(),
-        mins = Math.floor(game.clock.elapsedTime / 60),
-        secs = Math.floor(game.clock.elapsedTime % 60);
-    elems.time.textContent = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-    if (!game.isSpaceDown) return;
-    game.updateDirection();
-
-    if (game.motion.offset === 0) {
-        if (isWall()) return;
-        game.motion.dim = game.gridDirection.dim;
-    }
-
-    if (game.gridDirection.dim === game.motion.dim) {
-        move(game.gridDirection.sign * delta * game.SPEED);
-    } else {
-        move(-Math.sign(game.motion.offset) * delta * game.SPEED);
-    }
-
-    function move(distance) {
-        const before = Math.sign(game.motion.offset);
-        game.motion.offset += distance;
-
-        if (before * Math.sign(game.motion.offset) === -1) stopIfShould();
-
-        while (game.motion.offset < -2) {
-            game.motion.offset += 4;
-            game.gridPosition[game.motion.dim]--;
-            if (game.motion.offset < 0) stopIfShould();
-        }
-        while (game.motion.offset > 2) {
-            game.motion.offset -= 4;
-            game.gridPosition[game.motion.dim]++;
-            if (game.motion.offset > 0) stopIfShould();
-        }
-
-        function stopIfShould() {
-            if (game.motion.dim !== game.gridDirection.dim ||
-                    isWall({ sign: Math.sign(distance), dim: game.motion.dim })) {
-                game.motion.offset = 0;
-            }
-        }
-    }
-
-    function isWall({ sign, dim } = game.gridDirection) {
-        const pos = [...game.gridPosition];
-        if (sign < 0) pos[dim]--;
-        return [-1, game.mazeWalls.size[dim] - 1].includes(pos[dim]) ||
-            game.mazeWalls.walls[dim].getElement(pos);
-    }
-
-    const pos = game.gridPosition.map(
-        (value, index) => value * 4 + (index === game.motion.dim ? game.motion.offset : 0));
-
-    elems.pos.textContent = game.gridPosition;
-    game.camera.position.fromArray(pos);
-
-    if (!game.won && game.gridPosition.every((value, index) => game.mazeWalls.size[index] === value + 1)) {
-        elems.win.hidden = false;
-        elems.size.textContent = game.mazeWalls.size.join('x');
-        elems.totalTime.textContent =
-            `${mins} minute${mins === 1 ? '' : 's'} and ${secs} second${secs === 1 ? '' : 's'}`;
-        game.won = true;
-        game.controls.unlock();
-    }
-}
-
-function start() {
-    const size = [...document.querySelectorAll('input')].map(({ value }) => Math.floor(value));
-    if (!size.every(a => a > 0)) {
-        alert('Please enter valid values');
-        return;
-    }
-
-    game.controls.lock();
-
-    if (game.started) {
-        game.scene.remove(game.mesh);
-        game.geometry.dispose();
-        game.won = false;
-    } else {
-        game.started = true;
-        document.querySelector('#data').hidden = false;
-        loop();
-    }
-
-    game.clock = new THREE.Clock();
-    elems.time.textContent = '0:0';
-    elems.pos.textContent = '0,0,0';
-    game.gridPosition = [0, 0, 0];
-    game.camera.position.set(0, 0, 0);
-    game.camera.lookAt(1, 0, 1);
-
-    game.mazeWalls = new MazeWalls(new Maze(...size));
-    game.geometry = game.mazeWalls.toGeometry();
-    game.mesh = new THREE.Mesh(game.geometry, game.material);
-    game.scene.add(game.mesh);
-    game.winLight.position.set(...game.mazeWalls.size.map(a => 4 * a - 4));
-}
 
 class MazeWalls {
     positions = [];
@@ -309,3 +318,5 @@ class MazeWalls {
 
     static #uvArray = [0, 0,  1, 0,  0, 1,  0, 1,  1, 0,  1, 1];
 }
+
+new Game();
