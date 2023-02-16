@@ -43,6 +43,7 @@ button:active {
 
 body.threeD {
     background-color: black;
+    touch-action: none;
 }
 
 body.twoD {
@@ -55,6 +56,16 @@ a {
     position: fixed;
     top: 0;
     right: 0;
+}
+
+#xbutton {
+    position: fixed;
+    top: 0;
+    right: 0;
+}
+
+#xbutton:not(.visible), #win:not([hidden]) ~ #xbutton {
+    display: none;
 }
 
 .threeD canvas {

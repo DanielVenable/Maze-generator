@@ -1,15 +1,21 @@
+/**
+ * @author Daniel Venable
+ * 
+ * This program lets you play a game where you try to solve a 3D maze
+ */
+
 import Maze from '../maze.js';
 import * as THREE from 'https://cdn.skypack.dev/three@0.133.1';
 import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.133.1/examples/jsm/controls/PointerLockControls';
 
 class Game {
     isSpaceDown = false;
+    isTapping = false;
     renderer = new THREE.WebGLRenderer();
     scene = new THREE.Scene();
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
     material = new THREE.MeshLambertMaterial({ map: new THREE.TextureLoader().load('./wall.png') });
     winLight = new THREE.PointLight(0x0000ff, 15, 3, 2);
-    controls = null;
     clock = null;
     direction = new THREE.Vector3();
     gridDirection = {
@@ -25,39 +31,84 @@ class Game {
     walls = null;
     started = false;
     won = false;
+    controls = null;
+    rotationSpeed = 500 * Math.PI / 180;
+    dontUnlock = false;
 
-    constructor() {
-        document.querySelector('#controls button').addEventListener('click', () => this.start());
-        document.querySelector('#win button').addEventListener('click', () => elems.win.hidden = true);
-    
+    init() {
+        // stops mouse events triggered by touch from moving the camera
+        // this must be done before the mousemove event is attached to the controls
+        document.addEventListener('pointermove', event => {
+            if (event.pointerType === 'touch') {
+                event.stopImmediatePropagation();
+            }
+        });
+
+        this.controls = new PointerLockControls(this.camera, this.renderer.domElement);
+
+        document.querySelector('#start').addEventListener('click', () => this.start());
+        document.querySelector('#win button').addEventListener('click', () => {
+            elems.win.hidden = true;
+            this.showControls();
+        });
+
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         window.addEventListener('resize', () => {
             this.renderer.setSize(window.innerWidth, window.innerHeight);
             this.camera.aspect = window.innerWidth / window.innerHeight;
             this.camera.updateProjectionMatrix();
         });
-    
+
         document.body.appendChild(this.renderer.domElement);
-    
+
         this.renderer.render(this.scene, this.camera);
-    
+
         document.addEventListener('keydown', e => { if (e.code === 'Space') this.isSpaceDown = true; });
         document.addEventListener('keyup',   e => { if (e.code === 'Space') this.isSpaceDown = false; });
-    
-        const light = new THREE.PointLight(0xffffff, 0.7, 10, 2);
+
+        const light = new THREE.PointLight(0xffffff, 1.4, 10, 2);
         light.position.set(1, 1, 1);
         this.scene.add(this.camera);
         this.camera.add(light);
-        this.scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+        this.scene.add(new THREE.AmbientLight(0xffffff, 0.4));
         this.scene.add(this.winLight);
-    
-        this.controls = new PointerLockControls(this.camera, this.renderer.domElement);
-    
-        this.controls.addEventListener('lock', () => elems.controls.hidden = true);
-        this.controls.addEventListener('unlock', () => elems.controls.hidden = false);
-    
-        this.renderer.domElement.addEventListener('click',
-            () => this.controls.isLocked ? this.controls.unlock() : this.controls.lock());
+
+        this.controls.addEventListener('lock', () => {
+            this.hideControls();
+        });
+        this.controls.addEventListener('unlock', () => {
+            // when controls.lock() is called, and it fails to lock, then this event is
+            // erroneously triggered as soon as there is a touchstart event,
+            // so it does nothing when dontUnlock is true
+            if (!this.dontUnlock) {
+                this.showControls();
+            }
+        });
+
+        this.renderer.domElement.addEventListener('pointerdown', event => {
+            if (event.pointerType === 'mouse') {
+                if (this.controls.isLocked) {
+                    this.controls.unlock();
+                } else {
+                    this.controls.lock();
+                }
+            }
+        });
+
+        const showXButton = () => {
+            document.removeEventListener('touchstart', showXButton);
+            const xbutton = document.querySelector('#xbutton');
+            xbutton.classList.add('visible');
+            xbutton.addEventListener('touchstart', event => {
+                event.preventDefault(); // don't also click the link
+                this.controls.unlock();
+                this.showControls();
+            });
+        }
+
+        document.addEventListener('touchstart', showXButton);
+
+        elems.continue.addEventListener('click', () => this.hideControls());
     }
 
     start() {
@@ -66,9 +117,9 @@ class Game {
             alert('Please enter valid values');
             return;
         }
-    
+
         this.controls.lock();
-    
+
         if (this.started) {
             this.scene.remove(this.mesh);
             this.geometry.dispose();
@@ -76,21 +127,98 @@ class Game {
         } else {
             this.started = true;
             document.querySelector('#data').hidden = false;
+            if (elems.xbutton.classList.contains('visible')) {
+                elems.continue.hidden = false;
+            }
+            this.enableTouch();
             this.loop();
         }
-    
+
         this.clock = new THREE.Clock();
         elems.time.textContent = '0:0';
         elems.pos.textContent = '0,0,0';
         this.gridPosition = [0, 0, 0];
         this.camera.position.set(0, 0, 0);
         this.camera.lookAt(1, 0, 1);
-    
+
         this.mazeWalls = new MazeWalls(new Maze(...size));
         this.geometry = this.mazeWalls.toGeometry();
         this.mesh = new THREE.Mesh(this.geometry, this.material);
         this.scene.add(this.mesh);
         this.winLight.position.set(...this.mazeWalls.size.map(a => 4 * a - 4));
+    }
+
+    /** enables you to control it with a touchscreen */
+    enableTouch() {
+        if (!window.TouchEvent) {
+            return;
+        }
+
+        const prevX = new Map,
+            prevY = new Map;
+        
+        const taps = new Map;
+
+        this.renderer.domElement.addEventListener('touchstart', event => {
+            for (const { identifier, clientX, clientY } of event.touches) {
+                prevX.set(identifier, clientX);
+                prevY.set(identifier, clientY);
+
+                taps.set(identifier, this.clock.getElapsedTime());
+            }
+
+            this.dontUnlock = true;
+            setTimeout(() => this.dontUnlock = false, 0);
+        });
+
+        // factor by which touch movement matters more then mouse movement
+        const TOUCH_SPEED = 8;
+
+        document.addEventListener('touchmove', event => {
+            for (const { identifier, clientX, clientY } of event.touches) {
+                if (prevX.has(identifier)) {
+                    const deltaX = (clientX - prevX.get(identifier)) * TOUCH_SPEED;
+                    const deltaY = (clientY - prevY.get(identifier)) * TOUCH_SPEED;
+                    this.moveCamera(deltaX, deltaY);
+                }
+
+                prevX.set(identifier, clientX);
+                prevY.set(identifier, clientY);
+                taps.delete(identifier); // if you move your finger it doesn't count as a tap
+            }
+        });
+
+        const onTouchEnd = event => {
+            for (const { identifier } of event.changedTouches) {
+                prevX.delete(identifier);
+                prevY.delete(identifier);
+
+                if (this.clock.getElapsedTime() - taps.get(identifier) < 0.5) {
+                    this.isTapping = true;
+                }
+                taps.delete(identifier);
+            }
+        }
+
+        document.addEventListener('touchend', onTouchEnd);
+        document.addEventListener('touchcancel', onTouchEnd);
+    }
+
+    /** rotates the camera */
+    moveCamera(movementX, movementY) {
+        // tricks the PointerLockControls into thinking controls
+        // are locked so the onMouseMove function doesn't immediatly return
+        const lockedBefore = this.controls.isLocked;
+        this.controls.isLocked = true;
+
+        const event = new MouseEvent('mousemove', {
+            movementX, movementY
+        });
+
+        document.dispatchEvent(event);
+
+        // restore the controls to its original state
+        this.controls.isLocked = lockedBefore;
     }
 
     updateDirection() {
@@ -120,7 +248,9 @@ class Game {
             mins = Math.floor(this.clock.elapsedTime / 60),
             secs = Math.floor(this.clock.elapsedTime % 60);
         elems.time.textContent = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-        if (!this.isSpaceDown) return;
+
+        if (!this.isSpaceDown && !this.isTapping) return;
+
         this.updateDirection();
 
         if (this.motion.offset === 0) {
@@ -150,35 +280,37 @@ class Game {
             this.controls.unlock();
         }
     }
-    
+
     move(distance) {
         const before = Math.sign(this.motion.offset);
         this.motion.offset += distance;
 
         if (before * Math.sign(this.motion.offset) === -1) {
-            this.stopIfShould();
+            this.stopIfShould(distance);
         }
 
         while (this.motion.offset < -2) {
             this.motion.offset += 4;
             this.gridPosition[this.motion.dim]--;
             if (this.motion.offset < 0) {
-                this.stopIfShould();
+                this.stopIfShould(distance);
             }
         }
         while (this.motion.offset > 2) {
             this.motion.offset -= 4;
             this.gridPosition[this.motion.dim]++;
             if (this.motion.offset > 0) {
-                this.stopIfShould();
+                this.stopIfShould(distance);
             }
         }
     }
 
-    stopIfShould() {
+    stopIfShould(distance) {
         if (this.motion.dim !== this.gridDirection.dim ||
+                this.isTapping ||
                 this.isWall({ sign: Math.sign(distance), dim: this.motion.dim })) {
             this.motion.offset = 0;
+            this.isTapping = false;
         }
     }
 
@@ -187,6 +319,16 @@ class Game {
         if (sign < 0) pos[dim]--;
         return [-1, this.mazeWalls.size[dim] - 1].includes(pos[dim]) ||
             this.mazeWalls.walls[dim].getElement(pos);
+    }
+
+    showControls() { 
+        elems.controls.hidden = false;
+        elems.xbutton.hidden = true;
+    }
+
+    hideControls() {
+        elems.controls.hidden = true;
+        elems.xbutton.hidden = false;
     }
 
     static SPEED = 3;
@@ -198,7 +340,9 @@ const elems = {
     time:      document.querySelector('#time'),
     win:       document.querySelector('#win'),
     size:      document.querySelector('#size'),
-    totalTime: document.querySelector('#total-time')
+    totalTime: document.querySelector('#total-time'),
+    xbutton:   document.querySelector('#xbutton'),
+    continue:  document.querySelector('#continue')
 };
 
 class MazeWalls {
@@ -247,7 +391,8 @@ class MazeWalls {
                         x + mod, y - 1, z - 1,
                         x + mod, y + 1, z - 1
                     );
-                break; case 1:
+                    break;
+                case 1:
                     this.positions.push(
                         x + 1, y + mod, z - 1,
                         x - 1, y + mod, z - 1,
@@ -256,7 +401,8 @@ class MazeWalls {
                         x - 1, y + mod, z - 1,
                         x - 1, y + mod, z + 1
                     );
-                break; case 2:
+                    break;
+                case 2:
                     this.positions.push(
                         x - 1, y - 1, z + mod,
                         x + 1, y - 1, z + mod,
@@ -277,7 +423,8 @@ class MazeWalls {
                         x - mod, y - 1, z + 1,
                         x - mod, y + 1, z + 1
                     );
-                break; case 1:
+                    break;
+                case 1:
                     this.positions.push(
                         x + 1, y - mod, z + 1,
                         x - 1, y - mod, z + 1,
@@ -286,7 +433,8 @@ class MazeWalls {
                         x - 1, y - mod, z + 1,
                         x - 1, y - mod, z - 1
                     );
-                break; case 2:
+                    break;
+                case 2:
                     this.positions.push(
                         x + 1, y - 1, z - mod,
                         x - 1, y - 1, z - mod,
@@ -311,12 +459,12 @@ class MazeWalls {
     toGeometry() {
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(this.positions), 3));
-        geometry.setAttribute('normal',   new THREE.BufferAttribute(new Float32Array(this.normals), 3));
-        geometry.setAttribute('uv',       new THREE.BufferAttribute(new Float32Array(this.uvs), 2));
+        geometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(this.normals), 3));
+        geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(this.uvs), 2));
         return geometry;
     }
 
-    static #uvArray = [0, 0,  1, 0,  0, 1,  0, 1,  1, 0,  1, 1];
+    static #uvArray = [0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1];
 }
 
-new Game();
+new Game().init();
