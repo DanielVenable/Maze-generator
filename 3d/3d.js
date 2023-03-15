@@ -9,32 +9,34 @@ import * as THREE from 'https://cdn.skypack.dev/three@0.133.1';
 import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.133.1/examples/jsm/controls/PointerLockControls';
 
 class Game {
-    isSpaceDown = false;
+    keysDown = new Set();
     isTapping = false;
     renderer = new THREE.WebGLRenderer();
     scene = new THREE.Scene();
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
     material = new THREE.MeshLambertMaterial({ map: new THREE.TextureLoader().load('./wall.png') });
     winLight = new THREE.PointLight(0x0000ff, 15, 3, 2);
-    clock = null;
+    clock;
     direction = new THREE.Vector3();
+    dimensions = 0;
     gridDirection = {
         dim: null,
         sign: 0
     };
-    gridPosition = null;
+    gridPosition;
     motion = {
         offset: 0,
         dim: null,
         isStopped: false
     };
-    walls = null;
+    walls;
     started = false;
     won = false;
-    controls = null;
+    controls;
     rotationSpeed = 500 * Math.PI / 180;
     dontUnlock = false;
 
+    /** sets up the game */
     init() {
         // stops mouse events triggered by touch from moving the camera
         // this must be done before the mousemove event is attached to the controls
@@ -63,8 +65,8 @@ class Game {
 
         this.renderer.render(this.scene, this.camera);
 
-        document.addEventListener('keydown', e => { if (e.code === 'Space') this.isSpaceDown = true; });
-        document.addEventListener('keyup',   e => { if (e.code === 'Space') this.isSpaceDown = false; });
+        document.addEventListener('keydown', e => this.keysDown.add(e.code));
+        document.addEventListener('keyup', e => this.keysDown.delete(e.code));
 
         const light = new THREE.PointLight(0xffffff, 1.4, 10, 2);
         light.position.set(1, 1, 1);
@@ -73,9 +75,74 @@ class Game {
         this.scene.add(new THREE.AmbientLight(0xffffff, 0.4));
         this.scene.add(this.winLight);
 
+        const showXButton = () => {
+            document.removeEventListener('touchstart', showXButton);
+            const xbutton = document.querySelector('#xbutton');
+            xbutton.classList.add('visible');
+            xbutton.addEventListener('touchstart', event => {
+                event.preventDefault(); // don't also click the link
+                this.controls.unlock();
+                this.showControls();
+            });
+        }
+
+        document.addEventListener('touchstart', showXButton);
+
+        elems.continue.addEventListener('click', () => this.hideControls());
+
+        document.querySelector('#fourDbtn').addEventListener('click', function () {
+            document.querySelector('#fourD').hidden = false;
+            this.hidden = true;
+        });
+    }
+
+    /** starts or restarts the game */
+    start() {
+        const size = [...document.querySelectorAll(':not([hidden]) > input')]
+            .map(({ value }) => Math.floor(value));
+        if (!size.every(a => a > 0)) {
+            alert('Please enter valid values');
+            return;
+        }
+
+        this.dimensions = size.length;
+
+        this.controls.lock();
+
+        if (this.started) {
+            this.scene.remove(this.mesh);
+            this.geometry.dispose();
+            this.won = false;
+        } else {
+            this.firstStart();
+        }
+
+        this.clock = new THREE.Clock();
+        elems.time.textContent = '0:0';
+        this.gridPosition = new Array(this.dimensions).fill(0);
+        elems.pos.textContent = this.gridPosition.join(',');
+        this.camera.position.set(0, 0, 0);
+        this.camera.lookAt(1, 0, 1);
+
+        this.mazeWalls = new MazeWalls(new Maze(...size));
+        this.geometry = this.mazeWalls.toGeometry();
+        this.mesh = new THREE.Mesh(this.geometry, this.material);
+        this.scene.add(this.mesh);
+        this.winLight.position.set(...this.mazeWalls.size.map(a => 4 * a - 4));
+    }
+
+    /** does setup right before the game starts for the first time */
+    firstStart() {
+        this.started = true;
+        document.querySelector('#data').hidden = false;
+        if (elems.xbutton.classList.contains('visible')) {
+            elems.continue.hidden = false;
+        }
+
         this.controls.addEventListener('lock', () => {
             this.hideControls();
         });
+
         this.controls.addEventListener('unlock', () => {
             // when controls.lock() is called, and it fails to lock, then this event is
             // erroneously triggered as soon as there is a touchstart event,
@@ -95,57 +162,8 @@ class Game {
             }
         });
 
-        const showXButton = () => {
-            document.removeEventListener('touchstart', showXButton);
-            const xbutton = document.querySelector('#xbutton');
-            xbutton.classList.add('visible');
-            xbutton.addEventListener('touchstart', event => {
-                event.preventDefault(); // don't also click the link
-                this.controls.unlock();
-                this.showControls();
-            });
-        }
-
-        document.addEventListener('touchstart', showXButton);
-
-        elems.continue.addEventListener('click', () => this.hideControls());
-    }
-
-    start() {
-        const size = [...document.querySelectorAll('input')].map(({ value }) => Math.floor(value));
-        if (!size.every(a => a > 0)) {
-            alert('Please enter valid values');
-            return;
-        }
-
-        this.controls.lock();
-
-        if (this.started) {
-            this.scene.remove(this.mesh);
-            this.geometry.dispose();
-            this.won = false;
-        } else {
-            this.started = true;
-            document.querySelector('#data').hidden = false;
-            if (elems.xbutton.classList.contains('visible')) {
-                elems.continue.hidden = false;
-            }
-            this.enableTouch();
-            this.loop();
-        }
-
-        this.clock = new THREE.Clock();
-        elems.time.textContent = '0:0';
-        elems.pos.textContent = '0,0,0';
-        this.gridPosition = [0, 0, 0];
-        this.camera.position.set(0, 0, 0);
-        this.camera.lookAt(1, 0, 1);
-
-        this.mazeWalls = new MazeWalls(new Maze(...size));
-        this.geometry = this.mazeWalls.toGeometry();
-        this.mesh = new THREE.Mesh(this.geometry, this.material);
-        this.scene.add(this.mesh);
-        this.winLight.position.set(...this.mazeWalls.size.map(a => 4 * a - 4));
+        this.enableTouch();
+        this.loop();
     }
 
     /** enables you to control it with a touchscreen */
@@ -204,6 +222,11 @@ class Game {
         document.addEventListener('touchcancel', onTouchEnd);
     }
 
+    /** checks if the space key is held down */
+    get isSpaceDown() {
+        return this.keysDown.has('Space');
+    }
+
     /** rotates the camera */
     moveCamera(movementX, movementY) {
         // tricks the PointerLockControls into thinking controls
@@ -249,6 +272,8 @@ class Game {
             secs = Math.floor(this.clock.elapsedTime % 60);
         elems.time.textContent = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
 
+        this.WASDTurn(delta);
+
         if (!this.isSpaceDown && !this.isTapping) return;
 
         this.updateDirection();
@@ -281,6 +306,24 @@ class Game {
         }
     }
 
+    /** turns the camera if WASD are held down */
+    WASDTurn(delta) {
+        const dist = 1000 * delta;
+        if (this.keysDown.has('KeyW')) {
+            this.moveCamera(0, -dist);
+        }
+        if (this.keysDown.has('KeyA')) {
+            this.moveCamera(-dist, 0);
+        }
+        if (this.keysDown.has('KeyS')) {
+            this.moveCamera(0, dist);
+        }
+        if (this.keysDown.has('KeyD')) {
+            this.moveCamera(dist, 0);
+        }
+    }
+
+    /** move forward a certain distance */
     move(distance) {
         const before = Math.sign(this.motion.offset);
         this.motion.offset += distance;
