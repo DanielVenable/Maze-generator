@@ -4,7 +4,7 @@
  * This program lets you play a game where you try to solve a 3D maze
  */
 
-import Maze from '../maze.js';
+import Maze, { NDimArray } from '../maze.js';
 import * as THREE from 'https://cdn.skypack.dev/three@0.133.1';
 import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.133.1/examples/jsm/controls/PointerLockControls';
 
@@ -29,12 +29,16 @@ class Game {
         dim: null,
         isStopped: false
     };
-    walls;
+    /** @type MultiMazeWalls */ walls;
     started = false;
     won = false;
     controls;
-    rotationSpeed = 500 * Math.PI / 180;
     dontUnlock = false;
+    settings = {
+        WASDSpeed: 1000,
+        touchSpeed: 8,
+        moveSpeed: 3
+    }
 
     /** sets up the game */
     init() {
@@ -73,7 +77,6 @@ class Game {
         this.scene.add(this.camera);
         this.camera.add(light);
         this.scene.add(new THREE.AmbientLight(0xffffff, 0.4));
-        this.scene.add(this.winLight);
 
         const showXButton = () => {
             document.removeEventListener('touchstart', showXButton);
@@ -110,8 +113,8 @@ class Game {
         this.controls.lock();
 
         if (this.started) {
-            this.scene.remove(this.mesh);
-            this.geometry.dispose();
+            this.scene.remove(this.getMesh());
+            this.geometries.doOnValues(g => g.dispose());
             this.won = false;
         } else {
             this.firstStart();
@@ -124,11 +127,15 @@ class Game {
         this.camera.position.set(0, 0, 0);
         this.camera.lookAt(1, 0, 1);
 
-        this.mazeWalls = new MazeWalls(new Maze(...size));
-        this.geometry = this.mazeWalls.toGeometry();
-        this.mesh = new THREE.Mesh(this.geometry, this.material);
-        this.scene.add(this.mesh);
-        this.winLight.position.set(...this.mazeWalls.size.map(a => 4 * a - 4));
+        this.walls = new MultiMazeWalls(new Maze(...size));
+        this.geometries = this.walls.toGeometries();
+        this.meshes = this.geometries.mapAll(g => new THREE.Mesh(g, this.material));
+        this.scene.add(this.meshes.getElement(new Array(this.dimensions - 3).fill(0)));
+        this.winLight.position.set(...size.slice(0, 3).map(a => 4 * a - 4));
+
+        if (this.dimensions === 3) {
+            this.scene.add(this.winLight);
+        }
     }
 
     /** does setup right before the game starts for the first time */
@@ -163,6 +170,7 @@ class Game {
         });
 
         this.enableTouch();
+        this.enable4DControls();
         this.loop();
     }
 
@@ -189,14 +197,11 @@ class Game {
             setTimeout(() => this.dontUnlock = false, 0);
         });
 
-        // factor by which touch movement matters more then mouse movement
-        const TOUCH_SPEED = 8;
-
         document.addEventListener('touchmove', event => {
             for (const { identifier, clientX, clientY } of event.touches) {
                 if (prevX.has(identifier)) {
-                    const deltaX = (clientX - prevX.get(identifier)) * TOUCH_SPEED;
-                    const deltaY = (clientY - prevY.get(identifier)) * TOUCH_SPEED;
+                    const deltaX = (clientX - prevX.get(identifier)) * this.settings.touchSpeed;
+                    const deltaY = (clientY - prevY.get(identifier)) * this.settings.touchSpeed;
                     this.moveCamera(deltaX, deltaY);
                 }
 
@@ -284,9 +289,9 @@ class Game {
         }
 
         if (this.gridDirection.dim === this.motion.dim) {
-            this.move(this.gridDirection.sign * delta * Game.SPEED);
+            this.move(this.gridDirection.sign * delta * this.settings.moveSpeed);
         } else {
-            this.move(-Math.sign(this.motion.offset) * delta * Game.SPEED);
+            this.move(-Math.sign(this.motion.offset) * delta * this.settings.moveSpeed);
         }
 
         const pos = this.gridPosition.map(
@@ -296,9 +301,9 @@ class Game {
         this.camera.position.fromArray(pos);
 
         if (!this.won && this.gridPosition.every(
-                (value, index) => this.mazeWalls.size[index] === value + 1)) {
+                (value, index) => this.walls.size[index] === value + 1)) {
             elems.win.hidden = false;
-            elems.size.textContent = this.mazeWalls.size.join('x');
+            elems.size.textContent = this.walls.size.join('x');
             elems.totalTime.textContent =
                 `${mins} minute${mins === 1 ? '' : 's'} and ${secs} second${secs === 1 ? '' : 's'}`;
             this.won = true;
@@ -306,9 +311,43 @@ class Game {
         }
     }
 
+    /** lets you move through the 4th dimension by pressing Q and E keys */
+    enable4DControls() {
+        document.addEventListener('keydown', event => {
+            if (this.dimensions > 3) {
+                if (event.code === 'KeyE') {
+                    this.hyperMove(1, 3);
+                } else if (event.code === 'KeyQ') {
+                    this.hyperMove(-1, 3);
+                }
+            }
+        });
+    }
+
+    /** move through a higher dimension */
+    hyperMove(sign, dim) {
+        if (dim >= 3 && Math.abs(this.motion.offset) < 1 && !this.isWall({ sign, dim })) {
+            this.scene.remove(this.getMesh());
+            this.gridPosition[dim] += Math.sign(sign);
+            this.scene.add(this.getMesh());
+            if (this.gridPosition.slice(3).every(
+                    (value, index) => this.walls.size[index + 3] === value + 1)) {
+                this.scene.add(this.winLight);
+            } else {
+                this.scene.remove(this.winLight);
+            }
+        }
+    }
+
+
+    /** gets the mesh for the current position in higher dimensions */
+    getMesh() {
+        return this.meshes.getElement(this.gridPosition.slice(3));
+    }
+
     /** turns the camera if WASD are held down */
     WASDTurn(delta) {
-        const dist = 1000 * delta;
+        const dist = this.settings.WASDSpeed * delta;
         if (this.keysDown.has('KeyW')) {
             this.moveCamera(0, -dist);
         }
@@ -360,8 +399,8 @@ class Game {
     isWall({ sign, dim } = this.gridDirection) {
         const pos = [...this.gridPosition];
         if (sign < 0) pos[dim]--;
-        return [-1, this.mazeWalls.size[dim] - 1].includes(pos[dim]) ||
-            this.mazeWalls.walls[dim].getElement(pos);
+        return [-1, this.walls.size[dim] - 1].includes(pos[dim]) ||
+            this.walls.walls[dim].getElement(pos);
     }
 
     showControls() { 
@@ -373,8 +412,6 @@ class Game {
         elems.controls.hidden = true;
         elems.xbutton.hidden = false;
     }
-
-    static SPEED = 3;
 }
 
 const elems = {
@@ -388,38 +425,46 @@ const elems = {
     continue:  document.querySelector('#continue')
 };
 
-class MazeWalls {
-    positions = [];
-    normals = [];
-    uvs = [];
+class MultiMazeWalls {
+    #mazeWallses;
 
+    /** @param { Maze } maze */
     constructor(maze) {
         this.walls = maze.walls();
         this.size = maze.lengths;
+
+        this.#mazeWallses = new NDimArray(this.size.slice(3), () => new MazeWalls());
 
         for (let dimension = 0; dimension < 3; dimension++) {
             const otherDims = [0, 1, 2].filter(a => a !== dimension);
 
             this.walls[dimension].doOnIndicieses((indicies, isWall) => {
-                const pos = indicies.map(a => 4 * a);
+                const pos = indicies.slice(0, 3).map(a => 4 * a);
+                const mazeWalls = this.#mazeWallses.getElement(indicies.slice(3));
                 pos[dimension] += 2; // so the wall is in the gap between spaces
-                if (isWall) this.createFaces(pos, dimension, true);
-                else for (const d of otherDims) this.createFaces(pos, d, false);
-            });
-
-            for (const x of [-2, this.size[dimension] * 4 - 2]) {
-                for (let y = 0; y <= this.size[otherDims[0]] * 4 - 4; y += 2) {
-                    for (let z = 0; z <= this.size[otherDims[1]] * 4 - 4; z += 2) {
-                        const arr = [];
-                        arr[dimension] = x;
-                        arr[otherDims[0]] = y;
-                        arr[otherDims[1]] = z;
-                        this.createFace(arr, dimension, x === -2, true);
+                if (isWall) {
+                    mazeWalls.createFaces(pos, dimension, true);
+                } else {
+                    for (const d of otherDims) {
+                        mazeWalls.createFaces(pos, d, false);
                     }
                 }
-            }
+            });
+
+            this.#mazeWallses.doOnValues(walls => walls.fillEdge(this.size, dimension, otherDims));
         }
     }
+
+    /** converts it to an NDimArray of BufferGeometries */
+    toGeometries() {
+        return this.#mazeWallses.mapAll(walls => walls.toGeometry());
+    }
+}
+
+class MazeWalls {
+    positions = [];
+    normals = [];
+    uvs = [];
 
     createFace([x, y, z], direction, isFront, isFacingOut) {
         const mod = isFacingOut ? 1 : -1;
@@ -494,11 +539,28 @@ class MazeWalls {
         this.uvs.push(...MazeWalls.#uvArray);
     }
 
+    /** create 2 faces, one in each direction */
     createFaces(pos, direction, isFacingOut) {
         this.createFace(pos, direction, true, isFacingOut);
         this.createFace(pos, direction, false, isFacingOut);
     }
 
+    /** fill the outside edge of the maze */
+    fillEdge(size, dimension, otherDims) {
+        for (const x of [-2, size[dimension] * 4 - 2]) {
+            for (let y = 0; y <= size[otherDims[0]] * 4 - 4; y += 2) {
+                for (let z = 0; z <= size[otherDims[1]] * 4 - 4; z += 2) {
+                    const arr = [];
+                    arr[dimension] = x;
+                    arr[otherDims[0]] = y;
+                    arr[otherDims[1]] = z;
+                    this.createFace(arr, dimension, x === -2, true);
+                }
+            }
+        }
+    }
+
+    /** converts it to a BufferGeometry */
     toGeometry() {
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(this.positions), 3));
