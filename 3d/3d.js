@@ -37,7 +37,8 @@ class Game {
     settings = {
         WASDSpeed: 1000,
         touchSpeed: 8,
-        moveSpeed: 3
+        moveSpeed: 3,
+        fadeTime: 0.5
     }
 
     /** sets up the game */
@@ -133,7 +134,8 @@ class Game {
         this.scene.add(this.meshes.getElement(new Array(this.dimensions - 3).fill(0)));
         this.winLight.position.set(...size.slice(0, 3).map(a => 4 * a - 4));
 
-        if (this.dimensions === 3) {
+        if (size.slice(3).every(a => a === 1)) {
+            // it is a 3d maze
             this.scene.add(this.winLight);
         }
     }
@@ -271,7 +273,7 @@ class Game {
         });
     }
 
-    updatePosition() {
+    updatePosition(onlyIfMoving = true) {
         const delta = this.clock.getDelta(),
             mins = Math.floor(this.clock.elapsedTime / 60),
             secs = Math.floor(this.clock.elapsedTime % 60);
@@ -279,19 +281,21 @@ class Game {
 
         this.WASDTurn(delta);
 
-        if (!this.isSpaceDown && !this.isTapping) return;
+        if (onlyIfMoving) {
+            if (!this.isSpaceDown && !this.isTapping) return;
 
-        this.updateDirection();
+            this.updateDirection();
 
-        if (this.motion.offset === 0) {
-            if (this.isWall()) return;
-            this.motion.dim = this.gridDirection.dim;
-        }
+            if (this.motion.offset === 0) {
+                if (this.isWall()) return;
+                this.motion.dim = this.gridDirection.dim;
+            }
 
-        if (this.gridDirection.dim === this.motion.dim) {
-            this.move(this.gridDirection.sign * delta * this.settings.moveSpeed);
-        } else {
-            this.move(-Math.sign(this.motion.offset) * delta * this.settings.moveSpeed);
+            if (this.gridDirection.dim === this.motion.dim) {
+                this.move(this.gridDirection.sign * delta * this.settings.moveSpeed);
+            } else {
+                this.move(-Math.sign(this.motion.offset) * delta * this.settings.moveSpeed);
+            }
         }
 
         const pos = this.gridPosition.map(
@@ -314,31 +318,45 @@ class Game {
     /** lets you move through the 4th dimension by pressing Q and E keys */
     enable4DControls() {
         document.addEventListener('keydown', event => {
-            if (this.dimensions > 3) {
-                if (event.code === 'KeyE') {
-                    this.hyperMove(1, 3);
-                } else if (event.code === 'KeyQ') {
-                    this.hyperMove(-1, 3);
-                }
+            if (event.code === 'KeyE') {
+                this.hyperMove(1, 3);
+            } else if (event.code === 'KeyQ') {
+                this.hyperMove(-1, 3);
             }
+        });
+
+        this.renderer.domElement.addEventListener('animationend', function() {
+            this.classList.remove('fade');
         });
     }
 
     /** move through a higher dimension */
     hyperMove(sign, dim) {
-        if (dim >= 3 && Math.abs(this.motion.offset) < 1 && !this.isWall({ sign, dim })) {
-            this.scene.remove(this.getMesh());
-            this.gridPosition[dim] += Math.sign(sign);
-            this.scene.add(this.getMesh());
-            if (this.gridPosition.slice(3).every(
-                    (value, index) => this.walls.size[index + 3] === value + 1)) {
-                this.scene.add(this.winLight);
-            } else {
-                this.scene.remove(this.winLight);
-            }
+        if (3 <= dim && dim < this.dimensions &&
+                Math.abs(this.motion.offset) < 1 &&
+                !this.isWall({ sign, dim })) {
+
+            const gridPosition = [...this.gridPosition];
+            gridPosition[dim] += Math.sign(sign);
+
+            this.renderer.domElement.classList.add('fade');
+
+            setTimeout(() => {
+                this.scene.remove(this.getMesh());
+                this.gridPosition = gridPosition;
+                this.motion.offset = 0;
+                this.scene.add(this.getMesh());
+                if (gridPosition.slice(3).every(
+                        (value, index) => this.walls.size[index + 3] === value + 1)) {
+                    this.scene.add(this.winLight);
+                } else {
+                    this.scene.remove(this.winLight);
+                }
+                
+                this.updatePosition(false);
+            }, this.settings.fadeTime * 50);
         }
     }
-
 
     /** gets the mesh for the current position in higher dimensions */
     getMesh() {
