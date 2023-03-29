@@ -115,7 +115,7 @@ class Game {
 
         if (this.started) {
             this.scene.remove(this.getMesh());
-            this.geometries.doOnValues(g => g.dispose());
+            this.walls.dispose();
             this.won = false;
         } else {
             this.firstStart();
@@ -128,16 +128,11 @@ class Game {
         this.camera.position.set(0, 0, 0);
         this.camera.lookAt(1, 0, 1);
 
-        this.walls = new MultiMazeWalls(new Maze(...size));
-        this.geometries = this.walls.toGeometries();
-        this.meshes = this.geometries.mapAll(g => new THREE.Mesh(g, this.material));
-        this.scene.add(this.meshes.getElement(new Array(this.dimensions - 3).fill(0)));
-        this.winLight.position.set(...size.slice(0, 3).map(a => 4 * a - 4));
+        this.walls = new MultiMazeWalls(new Maze(...size), this.material);
 
-        if (size.slice(3).every(a => a === 1)) {
-            // it is a 3d maze
-            this.scene.add(this.winLight);
-        }
+        this.scene.add(this.getMesh());
+        this.winLight.position.set(...size.slice(0, 3).map(a => 4 * a - 4));
+        this.walls.getMesh(this.walls.size.slice(3).map(a => a - 1)).add(this.winLight);
     }
 
     /** does setup right before the game starts for the first time */
@@ -280,6 +275,7 @@ class Game {
         elems.time.textContent = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
 
         this.WASDTurn(delta);
+        Sparkles.update();
 
         if (onlyIfMoving) {
             if (!this.isSpaceDown && !this.isTapping) return;
@@ -345,14 +341,7 @@ class Game {
                 this.scene.remove(this.getMesh());
                 this.gridPosition = gridPosition;
                 this.motion.offset = 0;
-                this.scene.add(this.getMesh());
-                if (gridPosition.slice(3).every(
-                        (value, index) => this.walls.size[index + 3] === value + 1)) {
-                    this.scene.add(this.winLight);
-                } else {
-                    this.scene.remove(this.winLight);
-                }
-                
+                this.scene.add(this.getMesh());                
                 this.updatePosition(false);
             }, this.settings.fadeTime * 50);
         }
@@ -360,7 +349,7 @@ class Game {
 
     /** gets the mesh for the current position in higher dimensions */
     getMesh() {
-        return this.meshes.getElement(this.gridPosition.slice(3));
+        return this.walls.getMesh(this.gridPosition.slice(3));
     }
 
     /** turns the camera if WASD are held down */
@@ -444,21 +433,19 @@ const elems = {
 };
 
 class MultiMazeWalls {
-    #mazeWallses;
-
     /** @param { Maze } maze */
-    constructor(maze) {
+    constructor(maze, material) {
         this.walls = maze.walls();
         this.size = maze.lengths;
 
-        this.#mazeWallses = new NDimArray(this.size.slice(3), () => new MazeWalls());
+        const mazeWallses = new NDimArray(this.size.slice(3), () => new MazeWalls());
 
         for (let dimension = 0; dimension < 3; dimension++) {
             const otherDims = [0, 1, 2].filter(a => a !== dimension);
 
             this.walls[dimension].doOnIndicieses((indicies, isWall) => {
                 const pos = indicies.slice(0, 3).map(a => 4 * a);
-                const mazeWalls = this.#mazeWallses.getElement(indicies.slice(3));
+                const mazeWalls = mazeWallses.getElement(indicies.slice(3));
                 pos[dimension] += 2; // so the wall is in the gap between spaces
                 if (isWall) {
                     mazeWalls.createFaces(pos, dimension, true);
@@ -469,13 +456,112 @@ class MultiMazeWalls {
                 }
             });
 
-            this.#mazeWallses.doOnValues(walls => walls.fillEdge(this.size, dimension, otherDims));
+            mazeWallses.doOnValues(walls => walls.fillEdge(this.size, dimension, otherDims));
+        }
+
+        this.geometries = mazeWallses.mapAll(walls => walls.toGeometry());
+        this.sections = this.geometries.mapAll(g => new Section(g, material));
+
+        for (let dimension = 3; dimension < maze.dimensions; dimension++) {
+            /** @todo add lights or something where you can move through higher dimensions */
+            this.walls[dimension].doOnIndicieses((indicies, isWall) => {
+                if (!isWall) {
+                    this.sections
+                        .getElement(indicies.slice(3))
+                        .createPortal(dimension, true, indicies.slice(0, 3));
+                    indicies[dimension]++;
+                    this.sections
+                        .getElement(indicies.slice(3))
+                        .createPortal(dimension, false, indicies.slice(0, 3));
+                }
+            });
         }
     }
 
-    /** converts it to an NDimArray of BufferGeometries */
-    toGeometries() {
-        return this.#mazeWallses.mapAll(walls => walls.toGeometry());
+    /** gets a mesh object */
+    getMesh(coords) {
+        return this.sections.getElement(coords).mesh;
+    }
+
+    /** disposes the geometry objects */
+    dispose() {
+        this.geometries.doOnValues(g => g.dispose());
+    }
+}
+
+/** A 3D cross-section of the maze */
+class Section {
+    #portals = [];
+
+    constructor(geometry, material) {
+        this.mesh = new THREE.Mesh(geometry, material);
+    }
+
+    /** creates a visual effect that shows you can move through a higher dimension */
+    createPortal(dimension, isForward, coords) {
+        const portal = new Sparkles(Section.#color(dimension, isForward));
+        portal.position.set(...coords.map(a => 4 * a));
+        this.#portals.push(portal);
+        this.mesh.add(portal);
+    }
+
+    static #colors = [
+        [0xff0000],
+        [0x00ff00]
+    ];
+
+    static #color(dimension, isForward) {
+        return Section.#colors[+isForward][dimension - 3];
+    }
+}
+
+/** A sparkle effect. */
+class Sparkles extends THREE.Points {
+    constructor(color) {
+        if (Sparkles.#geometries.has(color)) {
+            super(Sparkles.#geometries.get(color), Sparkles.#materials.get(color));
+        } else {
+            const geometry = new THREE.BufferGeometry();
+            const positions = [];
+            for (let i = 0; i < Sparkles.numberOfParticles * 3; i++) {
+                positions.push(Math.random() * 2 - 1);
+            }
+
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            Sparkles.#geometries.set(color, geometry);
+
+            const material = new THREE.PointsMaterial({
+                size: 0.02,
+                color,
+                blending: THREE.AdditiveBlending,
+                transparent: true,
+                opacity: 0.3
+            });
+
+            Sparkles.#materials.set(color, material);
+
+            super(geometry, material);
+        }
+    }
+    
+    static numberOfParticles = 100;
+    static #geometries = new Map();
+    static #materials = new Map();
+
+    /** Updates the animation, changing the position of the particles. */
+    static update() {
+        for (const [, geometry] of this.#geometries) {
+            const positions = geometry.attributes.position.array;
+            for (let i = 0; i < positions.length; i++) {
+                positions[i] += (Math.random() - 0.5) / 100;
+                if (positions[i] > 1) {
+                    positions[i] = 1;
+                } else if (positions[i] < -1) {
+                    positions[i] = -1;
+                }
+            }
+            geometry.attributes.position.needsUpdate = true;
+        }
     }
 }
 
