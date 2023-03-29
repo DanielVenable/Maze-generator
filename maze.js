@@ -1,3 +1,5 @@
+export { Maze };
+
 export default class Maze {
     lines = [];
     segments = [];
@@ -7,7 +9,7 @@ export default class Maze {
         this.dimensions = this.lengths.length;
         let current = new Area(Array(this.dimensions).fill(0), lengths.map(a => a - 1), lengths.map(a => [-.5, a - .5]));
         const later = [];
-        const grid = new nDimArray(lengths);
+        const grid = new NDimArray(lengths);
 
         while (true) {
             if (current.isLine) {
@@ -77,7 +79,7 @@ export default class Maze {
         const walls = [];
 
         for (let d = 0; d < this.dimensions; d++) {
-            walls[d] = new nDimArray(this.lengths.map((a, d2) => d2 === d ? a - 1 : a), true);
+            walls[d] = new NDimArray(this.lengths.map((a, d2) => d2 === d ? a - 1 : a), true);
         }
 
         let last;
@@ -184,31 +186,93 @@ function random(max) {
     return Math.floor(Math.random() * max);
 }
 
-class nDimArray extends Array {
+export class NDimArray extends Array {
+    #value;
+
     constructor(size, fill) {
         super();
-        if (size.length > 1) {
+        this.size = size;
+        this.dimensions = size.length;
+        if (this.dimensions > 1) {
             const rest = size.slice(1);
-            for (let i = 0; i < size[0]; i++) this[i] = new nDimArray(rest, fill);
+            for (let i = 0; i < size[0]; i++) {
+                this[i] = new NDimArray(rest, fill);
+            }
+        } else if (this.dimensions === 0) {
+            this.#value = typeof fill === 'function' ? fill() : fill;
         } else if (fill !== undefined) {
-            this.length = size[0];
-            this.fill(fill);
+            if (typeof fill === 'function') {
+                for (let i = 0; i < size[0]; i++) {
+                    this[i] = fill();
+                }
+            } else {
+                this.length = size[0];
+                this.fill(fill);
+            }
         }
     }
 
     getElement(indices) {
-        if (indices.length === 1) return this[indices[0]];
+        if (indices.length !== this.dimensions) {
+            throw new TypeError('Wrong number of dimensions');
+        }
+        if (indices.length === 0) {
+            return this.#value;
+        } else if (indices.length === 1) {
+            return this[indices[0]];
+        }
         return this[indices[0]].getElement(indices.slice(1));
     }
 
     setElement(indices, value) {
-        if (indices.length === 1) this[indices[0]] = value;
-        else this[indices[0]].setElement(indices.slice(1), value);
+        if (indices.length !== this.dimensions) {
+            throw new TypeError('Wrong number of dimensions');
+        }
+        if (this.dimensions === 0) {
+            this.#value = value;
+        } else if (this.dimensions === 1) {
+            this[indices[0]] = value;
+        } else {
+            this[indices[0]].setElement(indices.slice(1), value);
+        }
     }  
 
+    /** calls a callback function on all values */
     doOnIndicieses(callback, list = []) {
-        if (this[0] instanceof nDimArray) {
+        if (this.dimensions === 0) {
+            callback([], this.#value);
+        } else if (this.dimensions === 1) {
+            this.forEach((value, index) => callback(list.concat(index), value));
+        } else {
             this.forEach((a, i) => a.doOnIndicieses(callback, list.concat(i)));
-        } else this.forEach((value, index) => callback(list.concat(index), value));
+        }
+    }
+
+    /** calls a callback function of each value */
+    doOnValues(callback) {
+        if (this.dimensions === 0) {
+            callback(this.#value);
+        } else if (this.dimensions === 1) {
+            this.forEach(value => callback(value));
+        } else {
+            this.forEach(a => a.doOnValues(callback));
+        }
+    }
+
+    /** calls a callback function on each value, returning a new NDimArray with the results */
+    mapAll(callback) {
+        const result = new NDimArray(this.size);
+        if (this.dimensions === 0) {
+            result.#value = callback(this.#value);
+        } else if (this.dimensions === 1) {
+            for (let i = 0; i < this.size[0]; i++) {
+                result[i] = callback(this[i]);
+            }
+        } else {
+            for (let i = 0; i < this.size[0]; i++) {
+                result[i] = this[i].mapAll(callback);
+            }
+        }
+        return result;
     }
 }
