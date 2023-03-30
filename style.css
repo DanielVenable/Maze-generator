@@ -87,7 +87,49 @@ a {
 }
 
 @keyframes fade {
-    0% {opacity: 1;}
-   50% {opacity: 0;}
-  100% {opacity: 1;}
+    0% { opacity: 1; }
+   50% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+#fourD-move-btn {
+    display: flex;
+    justify-content: center;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 3px;
+}
+
+#fourD-move-btn > button {
+    border: none;
+    margin: 10px;
+    width: 2em;
+    height: 2em;
+}
+
+#fourD-move-btn > [data-dim="3"][data-sign="1"] {
+    background-color: #00ff00;
+}
+
+#fourD-move-btn > [data-dim="3"][data-sign="-1"] {
+    background-color: #ff0000;
+}
+
+#fourD-move-btn > .show {
+    animation: appear 0.2s ease-in-out forwards;
+}
+
+#fourD-move-btn > :not(.show) {
+    animation: disappear 0.2s ease-in-out forwards;
+}
+
+@keyframes appear {
+    from { opacity: 0; }
+    to { opacity: 0.5; }
+}
+
+@keyframes disappear {
+    from { opacity: 0.5; }
+    to { opacity: 0; }
 }

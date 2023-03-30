@@ -23,18 +23,18 @@
             <label>Width:  <input type="number" value="2" size="5"></label>
             <label>Height: <input type="number" value="2" size="5"></label>
             <label>Depth:  <input type="number" value="2" size="5"></label>
-            <label id="fourD" hidden>Hyper-Depth: <input type="number" value="1" size="5"></label>
+            <label class="fourD" hidden>Hyper-Depth: <input type="number" value="1" size="5"></label>
             <button id="fourDbtn">4D</button>
         </div>
         <p>
-            Space/Tap: Move&emsp;Mouse/Swipe/WASD: Look
+            Space/Tap: Move &emsp; Mouse/Swipe/WASD: Look
+            <span class="fourD" hidden>&emsp; Q/E: 4D move</span>
         </p>
         <div>
             Get to the blue light at the far corner to win
         </div>
         <p>
             <button hidden id="continue">Continue</button>
-            &emsp;
             <button id="start">Generate!</button>
         </p>
     </div>
@@ -43,6 +43,10 @@
         Position: <span id="pos"></span>
         <br>
         Time: <span id="time"></span>
+    </div>
+    <div id="fourD-move-btn">
+        <button data-dim="3" data-sign="-1" hidden>Q</button>
+        <button data-dim="3" data-sign="1" hidden>E</button>
     </div>
 </body>
 </html>

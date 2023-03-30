@@ -95,7 +95,7 @@ class Game {
         elems.continue.addEventListener('click', () => this.hideControls());
 
         document.querySelector('#fourDbtn').addEventListener('click', function () {
-            document.querySelector('#fourD').hidden = false;
+            document.querySelectorAll('.fourD').forEach(a => a.hidden = false);
             this.hidden = true;
         });
     }
@@ -133,6 +133,13 @@ class Game {
         this.scene.add(this.getMesh());
         this.winLight.position.set(...size.slice(0, 3).map(a => 4 * a - 4));
         this.walls.getMesh(this.walls.size.slice(3).map(a => a - 1)).add(this.winLight);
+
+        for (const button of elems.fourDMoveBtns) {
+            // ">=" instead of ">" because dimension numbers are 0 based
+            button.hidden = button.dataset.dim >= this.dimensions;
+        }
+
+        this.enter();
     }
 
     /** does setup right before the game starts for the first time */
@@ -324,6 +331,10 @@ class Game {
         this.renderer.domElement.addEventListener('animationend', function() {
             this.classList.remove('fade');
         });
+
+        document.querySelector('#fourD-move-btn').addEventListener('click', ({ target }) => {
+            this.hyperMove(target.dataset.sign, target.dataset.dim);
+        });
     }
 
     /** move through a higher dimension */
@@ -331,6 +342,8 @@ class Game {
         if (3 <= dim && dim < this.dimensions &&
                 Math.abs(this.motion.offset) < 1 &&
                 !this.isWall({ sign, dim })) {
+
+            this.exit();
 
             const gridPosition = [...this.gridPosition];
             gridPosition[dim] += Math.sign(sign);
@@ -341,7 +354,8 @@ class Game {
                 this.scene.remove(this.getMesh());
                 this.gridPosition = gridPosition;
                 this.motion.offset = 0;
-                this.scene.add(this.getMesh());                
+                this.scene.add(this.getMesh());
+                this.enter();      
                 this.updatePosition(false);
             }, this.settings.fadeTime * 50);
         }
@@ -371,6 +385,14 @@ class Game {
 
     /** move forward a certain distance */
     move(distance) {
+        if (Math.abs(this.motion.offset) <= 1 && Math.abs(this.motion.offset + distance) > 1) {
+            this.exit();
+        }
+
+        if (Math.abs(this.motion.offset) > 1 && Math.abs(this.motion.offset + distance) <= 1) {
+            this.enter();
+        }
+
         const before = Math.sign(this.motion.offset);
         this.motion.offset += distance;
 
@@ -404,10 +426,32 @@ class Game {
     }
 
     isWall({ sign, dim } = this.gridDirection) {
+        if (dim >= this.dimensions) {
+            return true;
+        }
         const pos = [...this.gridPosition];
         if (sign < 0) pos[dim]--;
         return [-1, this.walls.size[dim] - 1].includes(pos[dim]) ||
             this.walls.walls[dim].getElement(pos);
+    }
+
+    /** update 4d buttons when you enter an area */
+    enter() {
+        for (const button of elems.fourDMoveBtns) {
+            if (!this.isWall(button.dataset)) {
+                button.hidden = false;
+                button.classList.add('show');
+            }
+        }
+    }
+
+    /** update 4d buttons when you exit an area */
+    exit() {
+        for (const button of elems.fourDMoveBtns) {
+            if (!this.isWall(button.dataset)) {
+                button.classList.remove('show');
+            }
+        }
     }
 
     showControls() { 
@@ -429,7 +473,8 @@ const elems = {
     size:      document.querySelector('#size'),
     totalTime: document.querySelector('#total-time'),
     xbutton:   document.querySelector('#xbutton'),
-    continue:  document.querySelector('#continue')
+    continue:  document.querySelector('#continue'),
+    fourDMoveBtns: document.querySelector('#fourD-move-btn').children
 };
 
 class MultiMazeWalls {
